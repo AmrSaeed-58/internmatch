@@ -1,0 +1,23 @@
+{
+  "c++": "cpp",
+  "c#": "csharp",
+  "f#": "fsharp",
+  ".net": "dotnet",
+  "asp.net": "aspnet",
+  "node.js": "nodejs",
+  "express.js": "expressjs",
+  "next.js": "nextjs",
+  "vue.js": "vuejs",
+  "react.js": "reactjs",
+  "react native": "reactnative",
+  "react-native": "reactnative",
+  "three.js": "threejs",
+  "d3.js": "d3js",
+  "socket.io": "socketio",
+  "scikit-learn": "scikitlearn",
+  "objective-c": "objectivec",
+  "t-sql": "tsql",
+  "pl/sql": "plsql",
+  "ci/cd": "cicd",
+  "ui/ux": "uiux"
+}

@@ -1,0 +1,9 @@
+export { default as StudentDashboard } from './StudentDashboard';
+export { default as StudentProfile } from './StudentProfile';
+export { default as StudentInternships } from './StudentInternships';
+export { default as StudentRecommendations } from './StudentRecommendations';
+export { default as StudentApplications } from './StudentApplications';
+export { default as StudentSaved } from './StudentSaved';
+export { default as StudentMessages } from './StudentMessages';
+export { default as StudentSettings } from './StudentSettings';
+export { default as StudentNotifications } from './StudentNotifications';
