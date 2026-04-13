@@ -13,7 +13,6 @@ import {
   Search,
   AlertCircle,
   Star,
-  FileText,
   Sparkles,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -544,10 +543,11 @@ export default function PostInternship() {
             </button>
             <button
               type="submit"
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 text-white text-sm font-bold hover:from-primary-700 hover:to-primary-800 active:from-primary-800 active:to-primary-900 transition-colors duration-150 cursor-pointer shadow-glow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 focus-visible:ring-offset-2"
+              disabled={submitting}
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 text-white text-sm font-bold hover:from-primary-700 hover:to-primary-800 active:from-primary-800 active:to-primary-900 transition-colors duration-150 cursor-pointer shadow-glow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <Star size={15} />
-              Submit for Review
+              {submitting ? 'Submitting…' : 'Submit for Review'}
             </button>
           </div>
         </form>

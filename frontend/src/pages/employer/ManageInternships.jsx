@@ -14,7 +14,6 @@ import {
   TrendingUp,
   Search,
   Loader2,
-  Briefcase,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';

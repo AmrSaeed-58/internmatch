@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   BrainCircuit,
@@ -341,8 +340,8 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="px-6 py-4 text-center text-xs text-surface-400 dark:text-surface-500">
           &copy; {new Date().getFullYear()} InternMatch &middot;{' '}
-          <a href="#" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Privacy</a> &middot;{' '}
-          <a href="#" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Terms</a>
+          <button type="button" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Privacy</button> &middot;{' '}
+          <button type="button" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Terms</button>
         </div>
       </div>
     </div>

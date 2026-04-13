@@ -24,11 +24,8 @@ import {
   Globe,
   CheckCircle2,
   Mail,
-  MapPin,
-  Phone,
   Briefcase,
   Star,
-  Award,
   BookOpen,
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -235,13 +232,13 @@ function HeroSection() {
   const y = useTransform(scrollY, [0, 500], [0, 150]);
   const opacity = useTransform(scrollY, [0, 400], [1, 0]);
 
-  const words = ['Dream', 'Perfect', 'Ideal', 'Next'];
+  const words = useMemo(() => ['Dream', 'Perfect', 'Ideal', 'Next'], []);
   const [wordIndex, setWordIndex] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => setWordIndex((i) => (i + 1) % words.length), 2500);
     return () => clearInterval(interval);
-  }, []);
+  }, [words.length]);
 
   return (
     <section className="relative min-h-screen flex items-center overflow-hidden pt-20">
@@ -895,15 +892,15 @@ function Footer() {
               AI-powered internship matching platform connecting students with their dream opportunities. Built with advanced matching algorithms to find where you truly belong.
             </p>
             <div className="flex items-center gap-4 text-surface-400">
-              <a href="#" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">
+              <button type="button" aria-label="Email" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">
                 <Mail size={22} />
-              </a>
-              <a href="#" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">
+              </button>
+              <button type="button" aria-label="Website" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">
                 <Globe size={22} />
-              </a>
-              <a href="#" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">
+              </button>
+              <button type="button" aria-label="Blog" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">
                 <BookOpen size={22} />
-              </a>
+              </button>
             </div>
           </div>
 

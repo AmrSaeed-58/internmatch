@@ -14,7 +14,6 @@ import {
   Calendar,
   Star,
   Loader2,
-  Users,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';

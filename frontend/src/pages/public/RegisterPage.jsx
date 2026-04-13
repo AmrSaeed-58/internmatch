@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
@@ -19,8 +18,6 @@ import {
   CheckCircle2,
   BookOpen,
   Briefcase,
-  Calendar,
-  UserCircle,
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import API from '../../api/axios';
@@ -326,9 +323,9 @@ function StudentForm({ onSuccess }) {
             className="mt-0.5 w-4 h-4 rounded border-surface-300 dark:border-surface-600 text-primary-600 focus:ring-primary-500/30 bg-surface-50 dark:bg-surface-800 cursor-pointer" />
           <label htmlFor="s-terms" className="text-sm text-surface-600 dark:text-surface-300 cursor-pointer">
             I agree to the{' '}
-            <a href="#" className="text-primary-600 dark:text-primary-400 hover:underline">Terms of Service</a>
+            <button type="button" className="text-primary-600 dark:text-primary-400 hover:underline">Terms of Service</button>
             {' '}and{' '}
-            <a href="#" className="text-primary-600 dark:text-primary-400 hover:underline">Privacy Policy</a>
+            <button type="button" className="text-primary-600 dark:text-primary-400 hover:underline">Privacy Policy</button>
           </label>
         </div>
         {errors.terms && (
@@ -509,9 +506,9 @@ function EmployerForm({ onSuccess }) {
             className="mt-0.5 w-4 h-4 rounded border-surface-300 dark:border-surface-600 text-primary-600 focus:ring-primary-500/30 bg-surface-50 dark:bg-surface-800 cursor-pointer" />
           <label htmlFor="e-terms" className="text-sm text-surface-600 dark:text-surface-300 cursor-pointer">
             I agree to the{' '}
-            <a href="#" className="text-primary-600 dark:text-primary-400 hover:underline">Terms of Service</a>
+            <button type="button" className="text-primary-600 dark:text-primary-400 hover:underline">Terms of Service</button>
             {' '}and{' '}
-            <a href="#" className="text-primary-600 dark:text-primary-400 hover:underline">Privacy Policy</a>
+            <button type="button" className="text-primary-600 dark:text-primary-400 hover:underline">Privacy Policy</button>
           </label>
         </div>
         {errors.terms && (
@@ -681,8 +678,8 @@ export default function RegisterPage() {
         {/* Footer */}
         <div className="px-6 py-4 text-center text-xs text-surface-400 dark:text-surface-500">
           &copy; {new Date().getFullYear()} InternMatch &middot;{' '}
-          <a href="#" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Privacy</a> &middot;{' '}
-          <a href="#" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Terms</a>
+          <button type="button" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Privacy</button> &middot;{' '}
+          <button type="button" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Terms</button>
         </div>
       </div>
     </div>

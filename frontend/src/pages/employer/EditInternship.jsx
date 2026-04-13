@@ -18,7 +18,6 @@ import {
   AlertCircle,
   Loader2,
   Sparkles,
-  Settings,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';

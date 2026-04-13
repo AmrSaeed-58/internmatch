@@ -13,7 +13,6 @@ import {
   Paperclip,
   Sparkles,
   Info,
-  MapPin,
   ExternalLink,
   CheckCheck,
 } from 'lucide-react';
@@ -75,7 +74,7 @@ function UserAvatar({ name, size = 'md', online = false }) {
 }
 
 function ConversationItem({ conversation, isActive, onClick }) {
-  const { otherUser, lastMessage, lastMessageAt, unreadCount, internshipTitle } = conversation;
+  const { otherUser, lastMessage, lastMessageAt, unreadCount } = conversation;
   return (
     <button
       onClick={onClick}
