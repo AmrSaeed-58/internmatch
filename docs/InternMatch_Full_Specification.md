@@ -16,10 +16,10 @@ The core differentiator is an **AI matching engine** that automatically extracts
 
 | Layer | Technology | Rationale |
 |---|---|---|
-| **Frontend** | React.js 18+ | Component-based SPA, large ecosystem |
-| **Styling** | Tailwind CSS 3+ | Utility-first, rapid UI development, built-in dark mode support |
+| **Frontend** | React.js 19 (Create React App) | Component-based SPA, large ecosystem |
+| **Styling** | Tailwind CSS 3.4 | Utility-first, rapid UI development, class-strategy dark mode (`darkMode: 'class'`) |
 | **State Management** | React Context API + useReducer | Sufficient for auth state and theme; no Redux overhead needed |
-| **Routing** | React Router v6 | Standard for React SPAs |
+| **Routing** | React Router v7 | Standard for React SPAs (v7 is backwards-compatible with the v6 route API used here) |
 | **HTTP Client** | Axios | Interceptors for JWT, clean API layer |
 | **Icons** | Lucide React | Clean, consistent icon set |
 | **Animation** | Framer Motion | Scroll-driven animations, page transitions, and micro-interactions on the landing page and dashboards |
@@ -77,6 +77,9 @@ All table and column names use snake_case. Most tables include `created_at` and/
 | graduation_year | INT | NOT NULL, CHECK (graduation_year BETWEEN 2000 AND 2100) | |
 | graduation_status | — | NOT stored in DB — computed on read | Derived at query time: if `graduation_year < YEAR(CURDATE())` then 'graduated', else 'enrolled'. Computed in the backend service layer or as a SQL expression: `IF(graduation_year < YEAR(CURDATE()), 'graduated', 'enrolled') AS graduation_status`. Never stored because it would go stale on year rollover. |
 | bio | TEXT | NULLABLE | Short personal statement |
+| gender | VARCHAR(20) | NULLABLE | Gender identity, optional (added via `migration_add_student_fields.sql`) |
+| date_of_birth | DATE | NULLABLE | Student birth date, optional (added via `migration_add_student_fields.sql`) |
+| location | VARCHAR(150) | NULLABLE | Student city/country, optional (added via `migration_add_student_fields.sql`). Also contributes to profile-completeness bonus in matching. |
 | linkedin_url | VARCHAR(255) | NULLABLE | |
 | github_url | VARCHAR(255) | NULLABLE | |
 | instagram_url | VARCHAR(255) | NULLABLE | |
@@ -839,7 +842,7 @@ FUNCTION calculateSemanticSimilarity(student, internship):
         "University: " + student.university,
         "Bio: " + student.bio,
         "Skills: " + JOIN(student.skills, ", "),
-        "Resume summary: " + FIRST_500_WORDS(student.resume.extracted_text)
+        "Resume: " + FIRST_2000_CHARS(student.resume.extracted_text)
     )
 
     // Build internship text
@@ -857,8 +860,9 @@ FUNCTION calculateSemanticSimilarity(student, internship):
 
     // Compute cosine similarity
     similarity = cosineSimilarity(studentEmbedding, internshipEmbedding)
-    // Result is between -1 and 1; normalize to 0-100
-    RETURN (similarity + 1) / 2 × 100
+    // On normalized embeddings similarity lives in [0, 1] in practice.
+    // Negative values are clamped to 0, then scaled to 0–100.
+    RETURN MAX(0, similarity) × 100
 ```
 
 **Cosine Similarity formula:**
@@ -877,34 +881,39 @@ Where:
 
 #### Component 3: Profile Bonus (detailed)
 
+The profile bonus rewards **profile completeness** — how much of the student's profile has been filled in. A richer profile produces a stronger embedding, gives employers more information, and signals that the student is serious about applying. The bonus is internship-independent: it depends only on the student, so it is computed once per request and reused across every candidate internship.
+
 ```
-FUNCTION calculateProfileBonus(student, internship):
-    gpaBonus = IF student.gpa IS NULL THEN 0  // GPA not provided — no bonus, no penalty
-               ELSE IF student.gpa >= 3.5 THEN 30
-               ELSE IF student.gpa >= 3.0 THEN 20
-               ELSE IF student.gpa >= 2.5 THEN 10
-               ELSE 0
+FUNCTION calculateProfileBonus(student):
+    score = 0
 
-    // Major relevance: determined by a static lookup table mapping majors to relevant industries.
-    // Stored as a JSON config file (utils/majorIndustryMap.json) loaded once at server startup.
-    // Example entries:
-    //   "computer science": ["Technology", "Finance", "Engineering"],
-    //   "marketing": ["Marketing", "Education"],
-    //   "electrical engineering": ["Technology", "Engineering"],
-    //   "finance": ["Finance", "Technology"],
-    //   "graphic design": ["Marketing", "Education", "Technology"],
-    //   "biology": ["Healthcare", "Education"],
-    //   "business administration": ["Finance", "Marketing", "Technology", "Education", "Engineering"]
-    // Lookup is case-insensitive. If student.major (lowercased, trimmed) is found in the map
-    // AND internship.employer.industry is in that major's industry list → relevant.
-    // If the major is not in the map at all → default to NOT relevant (0 bonus).
-    // The map can be extended without code changes by editing the JSON file.
-    majorBonus = IF majorIsRelevant(student.major, internship.employer.industry) THEN 50 ELSE 0
+    // Identity & academic core (max 45)
+    IF student.full_name           THEN score += 15
+    IF student.university          THEN score += 10
+    IF student.major               THEN score += 10
+    IF student.graduation_year     THEN score += 5
+    IF student.gpa                 THEN score += 5
 
-    experienceBonus = IF student has any 'accepted' applications THEN 20 ELSE 0
+    // Contact & narrative (max 25)
+    IF student.bio                 THEN score += 10
+    IF student.phone               THEN score += 5
+    IF student.linkedin_url        THEN score += 5
+    IF student.location            THEN score += 5
 
-    RETURN ((gpaBonus + majorBonus + experienceBonus) / 100) × 100  // Normalize to 0-100
+    // Resume (15)
+    IF student.primary_resume_id   THEN score += 15
+
+    // Skills count bonus (max 15): 3 points per skill, capped at 15
+    skillCount = COUNT(has_skill WHERE student_user_id = student.user_id)
+    score += MIN(15, skillCount × 3)
+
+    // Return on a 0–1 scale (consumed by the final-score formula below)
+    RETURN MIN(100, score) / 100
 ```
+
+**Rationale for this design (vs. a GPA/major/experience bonus):** completeness is a stronger signal of intent and also directly improves downstream scoring — a student with a resume, bio, and skills gets a better semantic embedding and a better skill score automatically, so the profile bonus becomes a multiplier on "how much the other two components can even work." GPA and major relevance are already captured indirectly through the semantic embedding (which includes major, university, and bio text) and through the skill match, so there is no need to double-count them here.
+
+**Implementation:** See `computeProfileBonus()` in `backend/src/controllers/internshipController.js`. The function runs one SQL query against `student` + `users` and one COUNT against `has_skill`. It is memoized per request so all N candidate internships in a recommendations call share a single computation.
 
 #### Graduated Student Handling:
 Students who have already graduated (`graduation_year < YEAR(CURDATE())` — computed on read, not stored) are handled as follows:
@@ -917,13 +926,19 @@ Students who have already graduated (`graduation_year < YEAR(CURDATE())` — com
 #### Full Combined Score:
 ```
 FUNCTION calculateFinalMatchScore(student, internship):
-    skillScore = calculateSkillMatchScore(student.skills, internship.requiredSkills)
-    semanticScore = calculateSemanticSimilarity(student, internship)
-    profileBonus = calculateProfileBonus(student, internship)
+    skillScore    = calculateSkillMatchScore(student.skills, internship.requiredSkills)  // 0–100
+    semanticScore = calculateSemanticSimilarity(student, internship)                     // 0–100
+    profileBonus  = calculateProfileBonus(student)                                       // 0–1
 
-    finalScore = (skillScore × 0.65) + (semanticScore × 0.20) + (profileBonus × 0.15)
-    RETURN ROUND(finalScore, 2)  // 0.00 to 100.00 — matches DECIMAL(5,2) storage in application.match_score
+    // Default weighted fusion (both embeddings available):
+    finalScore = (skillScore × 0.65) + (semanticScore × 0.20) + (profileBonus × 100 × 0.15)
+
+    // Fallback (either embedding missing — see edge case 7):
+    // finalScore = (skillScore × 0.80) + (profileBonus × 100 × 0.20)
+
+    RETURN ROUND(finalScore)  // integer 0–100, stored in application.match_score
 ```
+**Note on profileBonus units:** `computeProfileBonus()` returns a 0–1 float; the final-score formula multiplies it by 100 before applying its weight. Mathematically equivalent to "profileBonus on a 0–100 scale × 0.15", just a different internal representation.
 
 #### Algorithm Edge Cases & Guarantees:
 
@@ -934,8 +949,8 @@ FUNCTION calculateFinalMatchScore(student, internship):
 - Result: `skillScore = 0`. The semantic and profile bonus components still contribute, so the final score is not necessarily zero.
 
 **Edge case 2 — Internship has zero required skills:**
-- `mandatoryMax = 0` → `mandatoryScore = 100` (default when no mandatory skills). `optionalMax = 0` → `optionalScore = 0`.
-- Result: `skillScore = (100 × 0.75) + (0 × 0.25) = 75`. This is intentional — an internship with no skill requirements should give partial credit, not full credit, because the lack of requirements provides no signal of fit.
+- No skill signal is available, so the skill component is bypassed entirely. The match score falls back to the profile bonus only: `matchScore = ROUND(profileBonus × 20)` — a 0–20 range that rewards completeness but makes clear this internship cannot be strongly ranked for anyone.
+- See `listInternships()` / `formatMatchBreakdown()` in `backend/src/controllers/internshipController.js`.
 
 **Edge case 3 — Student has no resume (no extracted text):**
 - `calculateSemanticSimilarity` builds `studentText` without resume summary: "Resume summary: " with empty string.
@@ -943,7 +958,7 @@ FUNCTION calculateFinalMatchScore(student, internship):
 - The system should display a "Complete your profile for better matches" prompt.
 
 **Edge case 4 — Student has no GPA:**
-- `gpaBonus = 0` (not penalized — the bonus is opt-in). Students without GPA simply don't get that component of the profile bonus.
+- The GPA slot contributes 0 of the 5 completeness points it would otherwise add. Not penalized — the student simply misses that 5-point slice and any downstream semantic signal the GPA would have carried.
 
 **Edge case 5 — Internship has ONLY optional skills, no mandatory:**
 - `mandatoryMax = 0` → `mandatoryScore = 100`. `optionalMax > 0` → `optionalScore` calculated normally.
@@ -953,7 +968,7 @@ FUNCTION calculateFinalMatchScore(student, internship):
 - Both mandatory and optional points = 0. `skillScore = 0`. Semantic similarity may still find relevance if the student's bio/resume discusses related topics.
 
 **Edge case 7 — Embedding not yet generated (new student, new internship):**
-- If `student_embedding` row does not exist for the student, OR `internship_embedding` row does not exist for the internship: skip the semantic similarity component. Recalculate with adjusted weights: `finalScore = (skillScore × 0.80) + (profileBonus × 0.20)`. Log a warning. The missing embedding should be generated on next profile/internship access.
+- If `student_embedding` row does not exist for the student, OR `internship_embedding` row does not exist for the internship: skip the semantic similarity component. Recalculate with adjusted weights: `finalScore = (skillScore × 0.80) + (profileBonus × 100 × 0.20)`. The missing embedding is regenerated on next profile/internship update.
 
 **Edge case 8 — Gemini API fails during embedding generation:**
 - If the embedding API call fails (rate limit, network error, API outage): do NOT crash. Log the failure. Store no embedding (or keep the old one if it exists). The matching system falls back to adjusted weights as in edge case 7. Retry on next relevant trigger (profile update, page access).
@@ -1118,13 +1133,19 @@ These rules apply to ALL pages, components, and API endpoints that show internsh
 ### Public Pages (No Authentication Required)
 
 #### 1. Landing Page (`/`)
-- Hero section with headline: "Land Your Dream Internship" and subtext about AI-powered matching
-- Two CTA buttons: "Get Started Free" → /register, "See How It Works" → smooth scroll to features section
-- Stats bar: dynamically pulled from database — total active students, total active companies, active internships (from active employers only, deadline not passed), average match score. Deactivated/suspended accounts are excluded from public-facing counts.
-- "How It Works" section: 3-step visual (1. Create Profile & Upload Resume → 2. AI Analyzes Your Skills → 3. Get Matched with Internships)
-- Featured internships section: show 4-6 most recent active internships as preview cards
-- Testimonials section (can be static/placeholder)
-- Footer with links, copyright, social media icons
+Implemented in `frontend/src/pages/public/LandingPage.jsx`. Heavily animated with Framer Motion (scroll-driven transforms, `useInView` reveal animations, an animated particles field on the hero, and an `AnimatePresence` word-rotator on the headline).
+
+- **Top bar:** Logo ("Intern**Match**" with gradient), nav links (`#features`, `#how-it-works`, `#for-employers`), light/dark mode toggle (sun/moon icon, persisted via `ThemeContext`), "Sign In" link → `/login`, and "Get Started" button → `/register`. Collapses to a hamburger menu on mobile.
+- **Hero section:** Headline `Land Your {rotatingWord} Internship` where the rotating word cycles through `['Dream', 'Perfect', 'Ideal', 'Next']` every ~2.5s with a fade/slide transition. Subtext explains AI-powered matching. Primary CTA **"Start Your Journey"** → `/register`, secondary CTA **"I Have an Account"** → `/login`. Two floating stat cards overlay the hero illustration: a "95% Match" accuracy badge and a "500+ Jobs" counter — static decorative figures, not pulled from the DB.
+- **Stats bar:** Dynamically pulled from `GET /api/internships/stats` — total active students, total active companies, active internships (from active employers only, deadline not passed), and average match score over the last 90 days. Deactivated/suspended accounts are excluded from public-facing counts.
+- **"How It Works" section (`#how-it-works`):** 4-step visual (Upload Resume → AI Analyzes Skills → Get Matched → Apply & Land the Role), rendered as cards that animate in on scroll.
+- **Features section (`#features`):** Grid of feature cards (AI matching, skill extraction, real-time messaging, analytics, etc.) with hover transforms.
+- **Featured internships section:** Shows up to 6 most recent active internships from `GET /api/internships/featured` as preview cards.
+- **"For Employers" section (`#for-employers`):** Pitch block aimed at employer acquisition with a "Find candidates who actually fit" headline and a CTA to register as an employer.
+- **Testimonials section:** Three static testimonials (students and employers) with names, universities/companies, quotes, and star ratings. Placeholder content — not driven by a DB table.
+- **Final CTA / footer:** Large "Ready to get started?" call-to-action, followed by a footer with brand block, product links, company links, copyright, and social icon buttons. Social icons are `<button type="button">` placeholders (no external hrefs yet) for accessibility and lint compliance.
+
+**Gradient utilities used on this page:** `.text-gradient-primary` and `.text-gradient-warm`. The warm gradient is the accent treatment for phrases like "job board" and "actually fit" — defined in `frontend/src/index.css` alongside the primary gradient.
 
 #### 2. Registration Page (`/register`)
 - Toggle between "Student" and "Employer" registration (tab or radio button at top)
