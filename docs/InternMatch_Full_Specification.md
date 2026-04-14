@@ -22,6 +22,7 @@ The core differentiator is an **AI matching engine** that automatically extracts
 | **Routing** | React Router v6 | Standard for React SPAs |
 | **HTTP Client** | Axios | Interceptors for JWT, clean API layer |
 | **Icons** | Lucide React | Clean, consistent icon set |
+| **Animation** | Framer Motion | Scroll-driven animations, page transitions, and micro-interactions on the landing page and dashboards |
 | **Charts** | Recharts | React-native charting for dashboards/analytics |
 | **Notifications (UI)** | React Toastify | Toast notifications for user feedback |
 | **Backend** | Node.js + Express.js | JavaScript everywhere, simple REST API framework |
@@ -36,6 +37,7 @@ The core differentiator is an **AI matching engine** that automatically extracts
 | **Email** | Nodemailer + Gmail SMTP (free) or Mailtrap (free tier for dev) | Transactional emails for notifications and password recovery |
 | **Real-time Messaging** | Socket.IO | WebSocket-based real-time chat between students and employers |
 | **Validation** | express-validator (backend) + simple controlled components with inline validation (frontend) | Backend does the real validation; frontend shows user-friendly errors. No need for a form library in a project this size |
+| **Rate Limiting** | express-rate-limit | Throttles `/api/auth/*` endpoints (register, login, forgot-password, reset-password) to 10 requests per 15 minutes per IP |
 | **Environment Config** | dotenv | Secure configuration management |
 | **Dev Tooling** | nodemon, concurrently | Auto-restart server, run frontend+backend simultaneously |
 | **Version Control** | Git + GitHub | Collaboration and source code management |
@@ -1583,14 +1585,13 @@ These rules apply to ALL pages, components, and API endpoints that show internsh
 | PUT | /profile | Update student profile fields. **Triggers:** if skills, bio, major, or university change, regenerate student embedding. `graduation_status` is never stored — it is computed on read from `graduation_year`. | Student |
 | POST | /profile/picture | Upload or replace profile picture (max 2MB, jpg/png only). Old picture file deleted from disk as best-effort. | Student |
 | POST | /resume/upload | Upload or replace resume file (multipart). **Two-phase flow:** Phase 1 (this endpoint): saves the file to disk, extracts text via pdf-parse/mammoth, runs LLM skill extraction, and returns the extracted skills for review — but does NOT yet commit the resume replacement to the DB. The old resume (if any) remains active. The new file is saved to a staging path. Phase 2 (`POST /resume/confirm`): the student confirms the extracted skills, the backend runs the replacement transaction (delete old → insert new → set primary → save confirmed skills → regenerate embedding), and the resume becomes active. **If the student cancels or navigates away without confirming:** the staged file is orphaned and cleaned up by a periodic cleanup job (or on next upload attempt). Max 5MB, .pdf/.docx only. | Student |
-| POST | /resume/confirm | Confirm a staged resume upload. **Request body:** `{ extractedSkills: [...] }` — the skills the student accepted during review (may be a subset of what the LLM extracted, may include edits to proficiency levels). Runs the full replacement transaction: clears old primary_resume_id → nulls application.resume_id on old applications → deletes old resume record → inserts new resume from staging → sets as primary → saves confirmed skills to has_skill (inserting new skills into skill table only at this point) → regenerates student embedding → COMMIT. Old resume file is deleted only if no applications reference it (reference-counted). | Student |
+| POST | /resume/confirm | Confirm a staged resume upload. **Request body:** `{ staging, skills }` — `staging` is the staging descriptor returned by `/resume/upload` (includes `filePath`, original filename, file type, size, extracted text handle), and `skills` is the array of skills the student accepted during review (may be a subset of what the LLM extracted, may include edits to proficiency levels). Runs the full replacement transaction: clears old primary_resume_id → nulls application.resume_id on old applications → deletes old resume record → inserts new resume from staging → sets as primary → saves confirmed skills to has_skill (inserting new skills into skill table only at this point) → regenerates student embedding → COMMIT. Old resume file is deleted only if no applications reference it (reference-counted). | Student |
 | GET | /resume | Get current resume info (filename, upload date, file_type) or 404 if none | Student |
 | DELETE | /resume | Delete the student's resume. **DB changes run inside a transaction:** (1) clear `student.primary_resume_id`, (2) null `application.resume_id` on any applications referencing this resume (submitted snapshots are preserved), (3) delete the resume DB record, (4) COMMIT. **After DB commit:** check if any `application.submitted_resume_path` still references the old file — if yes, keep the file (it's needed for submitted application downloads). If no references remain, delete the physical file. Also clears extracted skills with source='extracted' and regenerates student embedding (now without resume data). | Student |
 | GET | /skills | Get student's current skills | Student |
 | POST | /skills | Add skill(s) to profile | Student |
 | PUT | /skills/:skillId | Update skill proficiency level | Student |
 | DELETE | /skills/:skillId | Remove a skill | Student |
-| POST | /skills/extract | Re-extract skills from current resume via LLM. Returns extracted skills for review. Requires a resume to be uploaded. | Student |
 | GET | /recommendations | Get AI-matched internships sorted by score. **Filter:** applies the canonical public visibility filter (see DATABASE SCHEMA section). | Student |
 | GET | /applications | List all student's applications (paginated, filterable by status, sortable by date) | Student |
 | GET | /applications/:id | Get full application details including internship info, match score breakdown, and current status | Student |
@@ -1600,10 +1601,7 @@ These rules apply to ALL pages, components, and API endpoints that show internsh
 | GET | /bookmarks | List all bookmarked internships | Student |
 | POST | /bookmarks/:internshipId | Bookmark an internship | Student |
 | DELETE | /bookmarks/:internshipId | Remove bookmark | Student |
-| GET | /invitations | List all invitations for this student. **Paginated:** query params `page` (default 1) and `limit` (default 20). Sorted by `created_at DESC`. | Student |
-| PUT | /invitations/:id/view | Mark an invitation as viewed. Only allowed if current status is `pending`. Sets status to `viewed`. | Student |
-| PUT | /invitations/:id/dismiss | Dismiss an invitation. Sets status = 'dismissed'. Student can still apply to the internship independently. | Student |
-| GET | /notifications | List notifications for this student. **Paginated:** query params `page` (default 1) and `limit` (default 20, max 50). Returns `{ notifications, total, page, totalPages }`. Sorted by `created_at DESC`. Optional filter: `?unread=true` to show only unread. | Student |
+| GET | /notifications | List notifications for this student. **Paginated:** query params `page` (default 1) and `limit` (default 20, max 50). Returns `{ notifications, total, page, totalPages }`. Sorted by `created_at DESC`. Optional filter: `?unread=true` to show only unread. Invitation notifications surface here as `type = 'invitation'`. | Student |
 | PUT | /notifications/:id/read | Mark notification as read | Student |
 | PUT | /notifications/read-all | Mark all notifications as read | Student |
 | PUT | /change-password | Change password (requires current password + new password). NOT the same as forgot/reset password — this is for authenticated users. **Also increments `users.token_version`** to invalidate all existing JWT sessions. | Student |
@@ -1618,9 +1616,9 @@ These rules apply to ALL pages, components, and API endpoints that show internsh
 | PUT | /profile | Update company profile | Employer |
 | POST | /profile/picture | Upload or replace profile picture for the employer contact person (max 2MB, jpg/png only). Old picture file deleted as best-effort. | Employer |
 | POST | /profile/logo | Upload company logo (max 2MB, jpg/png only). Old logo file deleted as best-effort. | Employer |
-| POST | /internships | Create new internship posting | Employer |
-| POST | /internships/extract-skills | Extract required skills from internship description text using AI (Subsystem 1B). **Request body:** `{ description }` (minimum 50 characters). Returns extracted skills with `skill_name`, `category`, `required_level`, `is_mandatory`, and `source: 'extracted'` for employer review. Does NOT save anything — the employer reviews and submits the skills with the internship form. **Rate limited:** max 10 per hour per user. **Fallback:** if Gemini is unavailable, returns 503 with "AI analysis temporarily unavailable. Please add skills manually." | Employer |
+| POST | /internships | Create new internship posting. Skill extraction (Subsystem 1B) runs server-side during creation when the employer did not supply an explicit skill list — the description is passed through Gemini and the extracted skills are persisted alongside the posting. | Employer |
 | GET | /internships | List all internships by this employer | Employer |
+| GET | /top-candidates | List top candidates across all active internships owned by this employer, AI-ranked by match score. Returns student summary (name, university, major, top skills, profile picture) plus the best-matching internship and score for each candidate. Used by the employer dashboard "Top Candidates" panel. | Employer |
 | GET | /internships/:id | Get specific internship details | Employer |
 | PUT | /internships/:id | Update internship. Allowed when status is `pending_approval`, `active`, or `rejected`. Returns 400 if `closed`. **If status is `active` and description/title/skills change:** regenerates the internship embedding via Gemini Embedding API. This ensures semantic search and matching stay current without requiring re-approval for minor edits. | Employer |
 | PUT | /internships/:id/resubmit | Resubmit a rejected internship for admin review. Only allowed when status is `rejected`. Sets status to `pending_approval` and clears `admin_review_note`. | Employer |
