@@ -77,9 +77,9 @@ All table and column names use snake_case. Most tables include `created_at` and/
 | graduation_year | INT | NOT NULL, CHECK (graduation_year BETWEEN 2000 AND 2100) | |
 | graduation_status | — | NOT stored in DB — computed on read | Derived at query time: if `graduation_year < YEAR(CURDATE())` then 'graduated', else 'enrolled'. Computed in the backend service layer or as a SQL expression: `IF(graduation_year < YEAR(CURDATE()), 'graduated', 'enrolled') AS graduation_status`. Never stored because it would go stale on year rollover. |
 | bio | TEXT | NULLABLE | Short personal statement |
-| gender | VARCHAR(20) | NULLABLE | Gender identity, optional (added via `migration_add_student_fields.sql`) |
-| date_of_birth | DATE | NULLABLE | Student birth date, optional (added via `migration_add_student_fields.sql`) |
-| location | VARCHAR(150) | NULLABLE | Student city/country, optional (added via `migration_add_student_fields.sql`). Also contributes to profile-completeness bonus in matching. |
+| gender | VARCHAR(20) | NULLABLE | Gender identity, optional |
+| date_of_birth | DATE | NULLABLE | Student birth date, optional |
+| location | VARCHAR(150) | NULLABLE | Student city/country, optional. Also contributes to profile-completeness bonus in matching. |
 | linkedin_url | VARCHAR(255) | NULLABLE | |
 | github_url | VARCHAR(255) | NULLABLE | |
 | instagram_url | VARCHAR(255) | NULLABLE | |
