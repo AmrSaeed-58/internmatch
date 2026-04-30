@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   MapPin,
   Clock,
@@ -32,6 +32,7 @@ import { toast } from 'react-toastify';
 import { getInternship as fetchInternshipAPI } from '../../api/internships';
 import { useAuth } from '../../contexts/AuthContext';
 import * as studentAPI from '../../api/student';
+import * as messagesAPI from '../../api/messages';
 
 const PROF_ORDER = { beginner: 1, intermediate: 2, advanced: 3, expert: 4 };
 
@@ -274,7 +275,14 @@ function ScoreRing({ score, size = 120, stroke = 10 }) {
 export default function InternshipDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isStudent = user?.role === 'student';
+
+  const backHref =
+    user?.role === 'student' ? '/student/internships'
+    : user?.role === 'employer' ? '/employer/internships'
+    : user?.role === 'admin' ? '/admin/internships'
+    : '/';
 
   const [internship, setInternship] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -282,6 +290,28 @@ export default function InternshipDetailPage() {
   const [showModal, setShowModal] = useState(false);
   const [studentProfile, setStudentProfile] = useState(null);
   const [studentSkillsList, setStudentSkillsList] = useState([]);
+  const [openingChat, setOpeningChat] = useState(false);
+
+  async function handleMessageEmployer() {
+    if (!isStudent) {
+      navigate('/login');
+      return;
+    }
+    if (!internship?.employer?.userId) return;
+    setOpeningChat(true);
+    try {
+      const res = await messagesAPI.createConversation({
+        otherUserId: internship.employer.userId,
+        internshipId: internship.internshipId,
+      });
+      const conversationId = res.data.data?.conversationId;
+      navigate(conversationId ? `/student/messages?conversation=${conversationId}` : '/student/messages');
+    } catch {
+      toast.error('Could not open conversation. Please try again.');
+    } finally {
+      setOpeningChat(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -383,8 +413,8 @@ export default function InternshipDetailPage() {
     return (
       <div className="min-h-screen bg-surface-50 dark:bg-dark-bg flex flex-col items-center justify-center gap-4">
         <p className="text-surface-500 dark:text-surface-400 text-lg">Internship not found</p>
-        <Link to="/student/internships" className="text-primary-600 dark:text-primary-400 font-semibold hover:underline">
-          Back to Internships
+        <Link to={backHref} className="text-primary-600 dark:text-primary-400 font-semibold hover:underline">
+          Back
         </Link>
       </div>
     );
@@ -448,13 +478,17 @@ export default function InternshipDetailPage() {
         {/* Breadcrumb strip */}
         <div className="sticky top-0 z-20 bg-white/85 dark:bg-dark-card/85 backdrop-blur-lg border-b border-surface-200/60 dark:border-surface-800/60">
           <div className="max-w-6xl mx-auto px-4 md:px-6 h-14 flex items-center justify-between gap-4">
-            <Link
-              to={isStudent ? '/student/internships' : '/'}
+            <button
+              type="button"
+              onClick={() => {
+                if (window.history.length > 1) navigate(-1);
+                else navigate(backHref);
+              }}
               className="inline-flex items-center gap-2 text-sm text-surface-500 dark:text-surface-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors cursor-pointer group"
             >
               <ArrowLeft size={15} className="group-hover:-translate-x-0.5 transition-transform" />
               Back
-            </Link>
+            </button>
             <div className="hidden sm:flex items-center gap-2 text-xs text-surface-400 dark:text-surface-500">
               <span>Internships</span>
               <ChevronRight size={12} />
@@ -576,13 +610,14 @@ export default function InternshipDetailPage() {
                 {bookmarked ? <BookmarkCheck size={13} /> : <Bookmark size={13} />}
                 {bookmarked ? 'Saved' : 'Save'}
               </button>
-              <Link
-                to="/student/messages"
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-300 ring-1 ring-surface-200 dark:ring-surface-700 hover:ring-primary-300 dark:hover:ring-primary-700 transition-colors cursor-pointer"
+              <button
+                onClick={handleMessageEmployer}
+                disabled={openingChat || !internship?.employer?.userId}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-300 ring-1 ring-surface-200 dark:ring-surface-700 hover:ring-primary-300 dark:hover:ring-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 <MessageSquare size={13} />
-                Message
-              </Link>
+                {openingChat ? 'Opening...' : 'Message'}
+              </button>
               <button
                 onClick={() => setShowModal(true)}
                 disabled={applyDisabled}

@@ -21,11 +21,12 @@ import DashboardLayout from '../../components/DashboardLayout';
 import EmptyState from '../../components/EmptyState';
 import * as adminAPI from '../../api/admin';
 
-// ── notification type → icon mapping (includes admin-only types) ────────────────
+// Notification type → icon (includes admin-only types). Keys must match the
+// literal `type` strings the backend writes into the notification table.
+// See notificationService.js for the canonical list.
 const TYPE_ICON_MAP = {
-  application_received: Bell,
-  application_status_changed: FileText,
-  status_changed: FileText,
+  new_application: Bell,
+  application_status_change: FileText,
   new_message: MessageSquare,
   internship_approved: CheckCircle,
   internship_rejected: XCircle,
@@ -37,9 +38,8 @@ const TYPE_ICON_MAP = {
 };
 
 const TYPE_GRADIENT_MAP = {
-  application_received: 'from-primary-500 to-primary-600',
-  application_status_changed: 'from-amber-500 to-amber-600',
-  status_changed: 'from-amber-500 to-amber-600',
+  new_application: 'from-primary-500 to-primary-600',
+  application_status_change: 'from-amber-500 to-amber-600',
   new_message: 'from-violet-500 to-violet-600',
   internship_approved: 'from-accent-500 to-accent-600',
   internship_rejected: 'from-red-500 to-red-600',
@@ -139,6 +139,7 @@ export default function AdminNotifications() {
         prev.map((n) => (n.notificationId === id ? { ...n, isRead: true } : n))
       );
       setUnreadCount((c) => Math.max(0, c - 1));
+      window.dispatchEvent(new Event('internmatch:notifications-changed'));
     } catch (err) {
       toast.error('Failed to mark notification as read');
     }
@@ -149,6 +150,7 @@ export default function AdminNotifications() {
       await adminAPI.markAllNotificationsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setUnreadCount(0);
+      window.dispatchEvent(new Event('internmatch:notifications-changed'));
       toast.success('All notifications marked as read');
     } catch (err) {
       toast.error('Failed to mark all as read');

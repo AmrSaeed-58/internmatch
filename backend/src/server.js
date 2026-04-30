@@ -201,21 +201,31 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('typing:start', ({ conversationId }) => {
+  // Resolve the other party's user id from a conversation, then forward
+  // the typing event to their personal room. Earlier code emitted to
+  // `user:${conversationId}` which is never a real user room.
+  async function emitTyping(eventName, conversationId) {
     if (!conversationId) return;
-    socket.to(`user:${conversationId}`).emit('typing:start', {
-      conversationId,
-      userId: socket.userId,
-    });
-  });
+    try {
+      const [conv] = await pool.execute(
+        'SELECT student_user_id, employer_user_id FROM conversation WHERE conversation_id = ?',
+        [String(conversationId)]
+      );
+      if (conv.length === 0) return;
+      const { student_user_id, employer_user_id } = conv[0];
+      if (student_user_id !== socket.userId && employer_user_id !== socket.userId) return;
+      const otherUserId = student_user_id === socket.userId ? employer_user_id : student_user_id;
+      io.to(`user:${otherUserId}`).emit(eventName, {
+        conversationId,
+        userId: socket.userId,
+      });
+    } catch (err) {
+      console.error(`[Socket.IO] ${eventName} error:`, err.message);
+    }
+  }
 
-  socket.on('typing:stop', ({ conversationId }) => {
-    if (!conversationId) return;
-    socket.to(`user:${conversationId}`).emit('typing:stop', {
-      conversationId,
-      userId: socket.userId,
-    });
-  });
+  socket.on('typing:start', ({ conversationId }) => emitTyping('typing:start', conversationId));
+  socket.on('typing:stop', ({ conversationId }) => emitTyping('typing:stop', conversationId));
 
   socket.on('disconnect', () => {
     // Room cleanup is automatic

@@ -18,12 +18,20 @@ import {
   Users,
   Clock,
   Loader2,
+  DollarSign,
+  Globe,
+  FileText,
+  Tag,
+  Star,
+  Linkedin,
+  ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';
 import StatusBadge from '../../components/StatusBadge';
 import EmptyState from '../../components/EmptyState';
 import * as adminAPI from '../../api/admin';
+import * as internshipsAPI from '../../api/internships';
 
 // ── constants ─────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 20;
@@ -72,49 +80,202 @@ function ModalShell({ title, onClose, children, footer }) {
   );
 }
 
-function ViewModal({ internship, onClose }) {
-  if (!internship) return null;
+function formatSalary(min, max) {
+  if (min == null && max == null) return 'Unpaid / Not specified';
+  if (min != null && max != null && min !== max) return `${min.toLocaleString()} – ${max.toLocaleString()}`;
+  const v = max ?? min;
+  return v ? v.toLocaleString() : 'Unpaid / Not specified';
+}
+
+function ViewModal({ internshipId, summary, onClose, onActionRequested }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(false);
+    internshipsAPI.getInternship(internshipId)
+      .then((res) => { if (!cancelled) setData(res.data.data); })
+      .catch(() => { if (!cancelled) setError(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [internshipId]);
+
+  const headerStatus = data?.status || summary?.status;
+  const showApprove = headerStatus === 'pending_approval' || headerStatus === 'closed';
+  const showReject = headerStatus === 'pending_approval' || headerStatus === 'active';
+
   return (
-    <ModalShell title="Internship Details" onClose={onClose} footer={
-      <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-bold border border-surface-200 dark:border-surface-700 text-surface-600 dark:text-surface-400 hover:bg-surface-50 dark:hover:bg-surface-700/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-surface-400">Close</button>
-    }>
-      <div className="space-y-4">
-        <div>
-          <h3 className="font-heading font-bold text-surface-900 dark:text-white text-xl tracking-tight">{internship.title}</h3>
-          <div className="flex flex-wrap gap-2 mt-2">
-            <StatusBadge status={internship.status} />
-            {internship.workType && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide ring-1 uppercase bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 ring-surface-200 dark:ring-surface-700 capitalize">
-                {internship.workType}
-              </span>
-            )}
-          </div>
+    <ModalShell
+      title="Internship Review"
+      onClose={onClose}
+      footer={
+        <>
+          <button
+            onClick={onClose}
+            className="px-4 py-2.5 rounded-xl text-sm font-bold border border-surface-200 dark:border-surface-700 text-surface-600 dark:text-surface-400 hover:bg-surface-50 dark:hover:bg-surface-700/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-surface-400"
+          >
+            Close
+          </button>
+          <div className="flex-1" />
+          {showReject && data && (
+            <button
+              onClick={() => { onActionRequested({ internship: { internshipId, title: data.title, companyName: data.employer?.companyName }, mode: 'reject' }); onClose(); }}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-red-600 hover:bg-red-700 text-white shadow-[0_2px_8px_rgba(220,38,38,0.3)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            >
+              <XCircle size={14} /> Reject
+            </button>
+          )}
+          {showApprove && data && (
+            <button
+              onClick={() => { onActionRequested({ internship: { internshipId, title: data.title, companyName: data.employer?.companyName }, mode: 'approve' }); onClose(); }}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-accent-600 hover:bg-accent-700 active:bg-accent-800 text-white shadow-glow-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+            >
+              <CheckCircle size={14} /> Approve
+            </button>
+          )}
+        </>
+      }
+    >
+      {loading && (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 size={26} className="animate-spin text-primary-500" />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { icon: Building2,   label: 'Company',  value: internship.companyName },
-            { icon: CalendarDays,label: 'Posted',   value: formatDate(internship.createdAt) },
-            { icon: Clock,       label: 'Deadline', value: formatDate(internship.deadline) },
-            { icon: MapPin,      label: 'Location', value: internship.location || '--' },
-            { icon: Users,       label: 'Applicants', value: internship.applicantCount ?? '--' },
-          ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="flex items-center gap-2.5 p-3 rounded-xl bg-surface-50 dark:bg-surface-900/50">
-              <Icon size={14} className="text-surface-400 dark:text-surface-500 shrink-0" />
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-surface-400 dark:text-surface-500">{label}</p>
-                <p className="text-sm font-semibold text-surface-800 dark:text-surface-100">{value}</p>
+      )}
+
+      {error && !loading && (
+        <div className="text-center py-12">
+          <AlertTriangle size={28} className="text-red-500 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-surface-700 dark:text-surface-300">Could not load internship details.</p>
+        </div>
+      )}
+
+      {data && !loading && (
+        <div className="space-y-6">
+          {/* Title + status */}
+          <div>
+            <h3 className="font-heading font-bold text-surface-900 dark:text-white text-xl tracking-tight leading-snug">{data.title}</h3>
+            <div className="flex flex-wrap gap-2 mt-2.5">
+              <StatusBadge status={data.status} />
+              {data.workType && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide ring-1 uppercase bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 ring-surface-200 dark:ring-surface-700 capitalize">
+                  {data.workType}
+                </span>
+              )}
+              {data.durationMonths && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ring-1 bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 ring-violet-200 dark:ring-violet-700/40">
+                  <Clock size={11} /> {data.durationMonths} mo
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Admin review note (rejected) */}
+          {data.status === 'rejected' && summary?.adminReviewNote && (
+            <div className="p-4 rounded-xl bg-red-50/60 dark:bg-red-900/10 border border-red-200/70 dark:border-red-800/40">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-red-700 dark:text-red-400 mb-1.5 inline-flex items-center gap-1.5">
+                <ShieldCheck size={11} /> Previous rejection reason
+              </p>
+              <p className="text-sm text-red-700 dark:text-red-300 leading-relaxed">{summary.adminReviewNote}</p>
+            </div>
+          )}
+
+          {/* Quick facts grid */}
+          <div className="grid grid-cols-2 gap-3">
+            <Fact icon={Building2}   label="Company"    value={data.employer?.companyName} />
+            <Fact icon={Tag}         label="Industry"   value={data.employer?.industry || '—'} />
+            <Fact icon={MapPin}      label="Location"   value={data.location || '—'} />
+            <Fact icon={DollarSign}  label="Salary"     value={formatSalary(data.salaryMin, data.salaryMax)} />
+            <Fact icon={CalendarDays} label="Posted"    value={formatDate(data.createdAt)} />
+            <Fact icon={Clock}       label="Deadline"   value={data.deadline ? formatDate(data.deadline) : 'No deadline'} />
+            <Fact icon={Users}       label="Applicants" value={data.applicantCount ?? 0} />
+            <Fact icon={Building2}   label="Co. size"   value={data.employer?.companySize || '—'} />
+          </div>
+
+          {/* Description */}
+          {data.description && (
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-surface-400 dark:text-surface-500 mb-2 inline-flex items-center gap-1.5">
+                <FileText size={11} /> Full description
+              </p>
+              <div className="p-4 rounded-xl bg-surface-50 dark:bg-surface-900/50 border border-surface-200 dark:border-surface-700/60">
+                <p className="text-sm text-surface-700 dark:text-surface-300 leading-relaxed whitespace-pre-wrap">{data.description}</p>
               </div>
             </div>
-          ))}
-        </div>
-        {internship.description && (
+          )}
+
+          {/* Required skills */}
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-surface-400 dark:text-surface-500 mb-1.5">Description</p>
-            <p className="text-sm text-surface-600 dark:text-surface-300 leading-relaxed line-clamp-5">{internship.description}</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-surface-400 dark:text-surface-500 mb-2 inline-flex items-center gap-1.5">
+              <Star size={11} /> Required skills ({data.skills?.length || 0})
+            </p>
+            {(!data.skills || data.skills.length === 0) ? (
+              <p className="text-sm italic text-surface-400 dark:text-surface-500">No skills specified.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {data.skills.map((sk) => (
+                  <span
+                    key={sk.skillId}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ring-1 ${
+                      sk.isMandatory
+                        ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 ring-primary-200 dark:ring-primary-700/40'
+                        : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 ring-surface-200 dark:ring-surface-700'
+                    }`}
+                  >
+                    {sk.displayName}
+                    <span className="text-[10px] opacity-70 capitalize">· {sk.requiredLevel}</span>
+                    {sk.isMandatory && <span className="text-[10px] opacity-70">· required</span>}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+
+          {/* Employer details */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-surface-400 dark:text-surface-500 mb-2 inline-flex items-center gap-1.5">
+              <Building2 size={11} /> Employer
+            </p>
+            <div className="p-4 rounded-xl bg-surface-50 dark:bg-surface-900/50 border border-surface-200 dark:border-surface-700/60 space-y-2">
+              {data.employer?.companyDescription && (
+                <p className="text-sm text-surface-700 dark:text-surface-300 leading-relaxed">{data.employer.companyDescription}</p>
+              )}
+              <div className="flex flex-wrap gap-3 text-xs">
+                {data.employer?.websiteUrl && (
+                  <a href={data.employer.websiteUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary-600 dark:text-primary-400 font-semibold hover:underline">
+                    <Globe size={11} /> Website
+                  </a>
+                )}
+                {data.employer?.linkedinUrl && (
+                  <a href={data.employer.linkedinUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary-600 dark:text-primary-400 font-semibold hover:underline">
+                    <Linkedin size={11} /> LinkedIn
+                  </a>
+                )}
+                {data.employer?.location && (
+                  <span className="inline-flex items-center gap-1 text-surface-500 dark:text-surface-400">
+                    <MapPin size={11} /> {data.employer.location}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </ModalShell>
+  );
+}
+
+function Fact({ icon: Icon, label, value }) {
+  return (
+    <div className="flex items-start gap-2.5 p-3 rounded-xl bg-surface-50 dark:bg-surface-900/50 border border-surface-200/60 dark:border-surface-700/40">
+      <Icon size={14} className="text-surface-400 dark:text-surface-500 shrink-0 mt-0.5" />
+      <div className="min-w-0">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-surface-400 dark:text-surface-500">{label}</p>
+        <p className="text-sm font-semibold text-surface-800 dark:text-surface-100 truncate">{value}</p>
+      </div>
+    </div>
   );
 }
 
@@ -255,7 +416,14 @@ export default function InternshipManagement() {
   return (
     <DashboardLayout role="admin">
       {/* Modals */}
-      {viewItem   && <ViewModal internship={viewItem} onClose={() => setViewItem(null)} />}
+      {viewItem   && (
+        <ViewModal
+          internshipId={viewItem.internshipId}
+          summary={viewItem}
+          onClose={() => setViewItem(null)}
+          onActionRequested={(req) => setActionItem(req)}
+        />
+      )}
       {actionItem && <ApproveRejectModal internship={actionItem.internship} mode={actionItem.mode} onClose={() => setActionItem(null)} onConfirm={handleAction} />}
       {deleteItem && <DeleteModal internship={deleteItem} onClose={() => setDeleteItem(null)} onConfirm={handleDelete} />}
 

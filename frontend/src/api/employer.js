@@ -19,6 +19,10 @@ export const uploadCompanyLogo = (file) => {
   });
 };
 
+// AI
+export const extractSkillsFromDescription = (description) =>
+  API.post('/employer/extract-skills', { description });
+
 // Internships
 export const createInternship = (data) => API.post('/employer/internships', data);
 export const getInternships = (params) => API.get('/employer/internships', { params });

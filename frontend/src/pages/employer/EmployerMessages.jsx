@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { toast } from 'react-toastify';
 import { MessageSquare, Send, Search, ChevronLeft, Loader2 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useAuth } from '../../contexts/AuthContext';
@@ -28,6 +30,8 @@ function Avatar({ name, size = 'md' }) {
 export default function EmployerMessages() {
   const { user } = useAuth();
   const socket = useSocket();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedConvId = searchParams.get('conversation');
   const [conversations, setConversations] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -60,6 +64,19 @@ export default function EmployerMessages() {
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
+
+  // Auto-open the conversation referenced by ?conversation=ID (e.g. when
+  // navigating from the "Message Student" button on the applicants page).
+  useEffect(() => {
+    if (!requestedConvId) return;
+    const id = Number(requestedConvId);
+    if (!Number.isFinite(id)) return;
+    setActiveId(id);
+    setMobileView('chat');
+    const next = new URLSearchParams(searchParams);
+    next.delete('conversation');
+    setSearchParams(next, { replace: true });
+  }, [requestedConvId, searchParams, setSearchParams]);
 
   // Fetch messages when conversation selected
   useEffect(() => {
@@ -141,8 +158,9 @@ export default function EmployerMessages() {
     const trimmed = input.trim();
     if (!trimmed || !activeId) return;
 
+    const tempId = `temp-${Date.now()}`;
     const tempMsg = {
-      messageId: Date.now(),
+      messageId: tempId,
       senderUserId: user?.userId,
       content: trimmed,
       isRead: false,
@@ -153,9 +171,14 @@ export default function EmployerMessages() {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
 
     try {
-      await messagesAPI.sendMessage(activeId, trimmed);
+      const res = await messagesAPI.sendMessage(activeId, trimmed);
+      const real = res.data.data;
+      // Swap optimistic temp row for the server-confirmed message so the
+      // socket echo (same messageId) doesn't add a duplicate.
+      setMessages((prev) => prev.map((m) => (m.messageId === tempId ? real : m)));
     } catch {
-      setMessages((prev) => prev.filter((m) => m.messageId !== tempMsg.messageId));
+      setMessages((prev) => prev.filter((m) => m.messageId !== tempId));
+      toast.error('Could not send message. Please try again.');
     }
   }
 

@@ -604,6 +604,7 @@ CREATE TABLE `skill` (
   `display_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
   `normalized_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
   `category` enum('programming','web','data','ai_ml','devops','mobile','design','soft_skill','other') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'other',
+  `name_embedding` json DEFAULT NULL,
   PRIMARY KEY (`skill_id`),
   UNIQUE KEY `normalized_name` (`normalized_name`),
   KEY `idx_skill_category` (`category`)

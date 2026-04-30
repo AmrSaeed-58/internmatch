@@ -5,6 +5,7 @@ const pool = require('../config/db');
 const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 const { normalizeSkillName } = require('../utils/normalizeSkill');
+const { findOrCreateSkill } = require('../utils/skillResolver');
 
 const BCRYPT_SALT_ROUNDS = 12;
 const uploadDir = process.env.UPLOAD_DIR || './uploads';
@@ -198,6 +199,142 @@ const uploadCompanyLogo = catchAsync(async (req, res) => {
   });
 });
 
+// ── POST /api/employer/extract-skills ──────────────────────────────────────────
+// Uses Gemini to extract required skills from a job description, cross-referenced
+// with the skill table. Falls back to keyword matching if no API key is set or the
+// LLM call fails.
+const extractSkillsFromJobDescription = catchAsync(async (req, res) => {
+  const { description } = req.body;
+
+  if (!description || typeof description !== 'string' || description.trim().length < 30) {
+    throw new AppError('Description must be at least 30 characters to extract skills', 400);
+  }
+
+  const text = description.trim();
+  let extracted = [];
+  let usedFallback = false;
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (apiKey) {
+    try {
+      const { GoogleGenerativeAI } = require('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: process.env.GEMINI_GENERATION_MODEL || 'gemini-2.5-flash-lite',
+      });
+
+      const prompt = `You are a hiring assistant. Read this internship job description and extract EVERY skill mentioned for the candidate — include both must-have skills AND nice-to-have / bonus / preferred skills. Do not omit optional skills.
+
+Return a JSON array where each item has:
+- "skill_name": canonical name (e.g. "Python", "React", "Figma", "Project Management")
+- "category": one of: programming, web, data, ai_ml, devops, mobile, design, soft_skill, other
+- "required_level": minimum proficiency the role needs — one of: beginner, intermediate, advanced (default to intermediate when unclear; use beginner for skills described as "familiarity" / "basic" / "exposure")
+- "is_mandatory": true if the description marks it as required / must-have / required skill / "you should know"; false if it appears under nice-to-have / bonus / plus / preferred / "experience with X is a plus" / "familiarity with X" sections
+
+Only return the JSON array, no prose, no markdown fences. Be precise — only list skills that are clearly named or strongly implied. Ignore generic phrases like "team player" unless they're a distinct soft skill. Aim to capture all named tools, languages, frameworks, and concepts even if they appear in the bonus / nice-to-have section.
+
+Job description:
+${text.substring(0, 4000)}`;
+
+      const result = await model.generateContent(prompt);
+      const response = result.response.text();
+
+      let parsed;
+      try {
+        parsed = JSON.parse(response);
+      } catch {
+        const match = response.match(/\[[\s\S]*\]/);
+        if (!match) throw new Error('Could not parse LLM response');
+        parsed = JSON.parse(match[0]);
+      }
+      if (!Array.isArray(parsed)) throw new Error('LLM did not return an array');
+
+      const validCategories = ['programming', 'web', 'data', 'ai_ml', 'devops', 'mobile', 'design', 'soft_skill', 'other'];
+      const validLevels = ['beginner', 'intermediate', 'advanced'];
+
+      const seen = new Set();
+      for (const item of parsed) {
+        if (!item || typeof item.skill_name !== 'string') continue;
+        const skillName = item.skill_name.trim();
+        if (!skillName) continue;
+
+        const normalized = normalizeSkillName(skillName);
+        if (seen.has(normalized)) continue;
+        seen.add(normalized);
+
+        const category = validCategories.includes(item.category) ? item.category : 'other';
+        const requiredLevel = validLevels.includes(item.required_level) ? item.required_level : 'intermediate';
+        const isMandatory = item.is_mandatory === false ? false : true;
+
+        const [existing] = await pool.execute(
+          'SELECT skill_id, display_name, category FROM skill WHERE normalized_name = ?',
+          [normalized]
+        );
+
+        if (existing.length > 0) {
+          extracted.push({
+            skillId: existing[0].skill_id,
+            displayName: existing[0].display_name,
+            category: existing[0].category,
+            requiredLevel,
+            isMandatory,
+            isCustom: false,
+          });
+        } else {
+          extracted.push({
+            skillId: null,
+            displayName: skillName,
+            category,
+            requiredLevel,
+            isMandatory,
+            isCustom: true,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('LLM skill extraction failed, using fallback:', err.message);
+      usedFallback = true;
+    }
+  } else {
+    usedFallback = true;
+  }
+
+  // Keyword-match fallback against existing skill table
+  if (usedFallback) {
+    const [allSkills] = await pool.execute(
+      'SELECT skill_id, display_name, category FROM skill'
+    );
+    const textLower = text.toLowerCase();
+    const seen = new Set();
+    for (const s of allSkills) {
+      const escaped = s.display_name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\b${escaped}\\b`, 'i');
+      if (regex.test(textLower) && !seen.has(s.skill_id)) {
+        seen.add(s.skill_id);
+        extracted.push({
+          skillId: s.skill_id,
+          displayName: s.display_name,
+          category: s.category,
+          requiredLevel: 'intermediate',
+          isMandatory: true,
+          isCustom: false,
+        });
+      }
+    }
+  }
+
+  res.json({
+    success: true,
+    message: extracted.length > 0
+      ? `Extracted ${extracted.length} skill${extracted.length === 1 ? '' : 's'} from the description`
+      : 'No skills could be extracted — try adding more detail',
+    data: {
+      skills: extracted,
+      method: usedFallback ? 'keyword_fallback' : 'llm',
+    },
+  });
+});
+
 // ── POST /api/employer/internships ─────────────────────────────────────────────
 const createInternship = catchAsync(async (req, res) => {
   const { userId } = req.user;
@@ -239,20 +376,8 @@ const createInternship = catchAsync(async (req, res) => {
       let skillId = skill.skillId;
 
       if (!skillId && skill.skillName) {
-        const normalizedName = normalizeSkillName(skill.skillName);
-        const [existing] = await connection.execute(
-          'SELECT skill_id FROM skill WHERE normalized_name = ?',
-          [normalizedName]
-        );
-        if (existing.length > 0) {
-          skillId = existing[0].skill_id;
-        } else {
-          const [inserted] = await connection.execute(
-            'INSERT INTO skill (display_name, normalized_name, category) VALUES (?, ?, ?)',
-            [skill.skillName, normalizedName, skill.category || 'other']
-          );
-          skillId = inserted.insertId;
-        }
+        const resolved = await findOrCreateSkill(connection, skill.skillName, skill.category || 'other');
+        skillId = resolved.skillId;
       }
 
       if (skillId) {
@@ -485,20 +610,8 @@ const updateInternship = catchAsync(async (req, res) => {
         let skillId = skill.skillId;
 
         if (!skillId && skill.skillName) {
-          const normalizedName = normalizeSkillName(skill.skillName);
-          const [existingSkill] = await connection.execute(
-            'SELECT skill_id FROM skill WHERE normalized_name = ?',
-            [normalizedName]
-          );
-          if (existingSkill.length > 0) {
-            skillId = existingSkill[0].skill_id;
-          } else {
-            const [inserted] = await connection.execute(
-              'INSERT INTO skill (display_name, normalized_name, category) VALUES (?, ?, ?)',
-              [skill.skillName, normalizedName, skill.category || 'other']
-            );
-            skillId = inserted.insertId;
-          }
+          const resolved = await findOrCreateSkill(connection, skill.skillName, skill.category || 'other');
+          skillId = resolved.skillId;
         }
 
         if (skillId) {
@@ -1417,6 +1530,7 @@ module.exports = {
   updateProfile,
   uploadProfilePicture,
   uploadCompanyLogo,
+  extractSkillsFromJobDescription,
   createInternship,
   getInternships,
   getInternship,

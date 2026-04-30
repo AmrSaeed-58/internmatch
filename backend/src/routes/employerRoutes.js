@@ -66,6 +66,21 @@ router.put(
 router.post('/profile/picture', uploadPictureMiddleware, employerController.uploadProfilePicture);
 router.post('/profile/logo', uploadLogoMiddleware, employerController.uploadCompanyLogo);
 
+// ── AI: Extract Skills from Job Description ────────────────────────────────────
+router.post(
+  '/extract-skills',
+  [
+    body('description')
+      .trim()
+      .notEmpty()
+      .withMessage('Description is required')
+      .isLength({ min: 30, max: 10000 })
+      .withMessage('Description must be 30–10,000 characters'),
+  ],
+  handleValidationErrors,
+  employerController.extractSkillsFromJobDescription
+);
+
 // ── Internships ─────────────────────────────────────────────────────────────────
 router.post(
   '/internships',

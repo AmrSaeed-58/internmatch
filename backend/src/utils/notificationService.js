@@ -3,16 +3,20 @@ const { sendEmail } = require('../config/email');
 
 /**
  * Preference-to-notification type mapping.
- * Maps notification types to the preference column that controls email delivery.
+ * Keys MUST match the literal `type` strings inserted into the notification
+ * table by the controllers. Values are the column name in
+ * notification_preference that gates email delivery for that type.
+ *
+ * Types with no entry here are still inserted as in-app notifications but
+ * never trigger email — used for admin-only events with no preference row.
  */
 const TYPE_TO_PREF = {
-  application_submitted: 'email_new_application',        // employer pref
-  application_status_update: 'email_application_status',  // student pref
-  new_message: 'email_new_message',                       // both
-  recommendation: 'email_recommendations',                // student pref
-  internship_approved: 'email_internship_approved',       // employer pref
-  internship_rejected: 'email_internship_approved',       // employer pref
-  invitation: 'email_invitation',                         // student pref
+  new_application: 'email_new_application',                 // employer ← student applied
+  application_status_change: 'email_application_status',    // student ← employer changed status
+  new_message: 'email_new_message',                         // both
+  internship_approved: 'email_internship_approved',         // employer ← admin approved
+  internship_rejected: 'email_internship_approved',         // employer ← admin rejected
+  invitation_received: 'email_invitation',                  // student ← employer invited
 };
 
 /**

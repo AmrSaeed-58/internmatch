@@ -11,6 +11,10 @@ import {
   ForgotPasswordPage,
   ResetPasswordPage,
   InternshipDetailPage,
+  AboutPage,
+  PrivacyPage,
+  TermsPage,
+  ContactPage,
 } from './pages/public';
 import {
   StudentDashboard,
@@ -89,6 +93,12 @@ function AppRoutes() {
 
       {/* Internship Detail — Public with extended access */}
       <Route path="/internship/:id" element={<InternshipDetailPage />} />
+
+      {/* Static legal/info pages */}
+      <Route path="/about" element={<AboutPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/contact" element={<ContactPage />} />
 
       {/* Student Routes */}
       <Route path="/student/dashboard" element={

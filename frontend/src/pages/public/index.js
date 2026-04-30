@@ -4,3 +4,7 @@ export { default as RegisterPage } from './RegisterPage';
 export { default as ForgotPasswordPage } from './ForgotPasswordPage';
 export { default as ResetPasswordPage } from './ResetPasswordPage';
 export { default as InternshipDetailPage } from './InternshipDetailPage';
+export { default as AboutPage } from './AboutPage';
+export { default as PrivacyPage } from './PrivacyPage';
+export { default as TermsPage } from './TermsPage';
+export { default as ContactPage } from './ContactPage';

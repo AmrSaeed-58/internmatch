@@ -145,14 +145,16 @@ const getUserById = catchAsync(async (req, res) => {
   // Get role-specific data
   if (user.role === 'student') {
     const [[student]] = await pool.query(
-      `SELECT university, major, gpa, graduation_year, bio, linkedin_url, portfolio_url
+      `SELECT university, major, gpa, graduation_year, bio,
+              linkedin_url, github_url, instagram_url, phone, location
        FROM student WHERE user_id = ?`,
       [id]
     );
     user.studentProfile = student || null;
   } else if (user.role === 'employer') {
     const [[employer]] = await pool.query(
-      `SELECT company_name, industry, company_size, company_website, company_description, company_logo
+      `SELECT company_name, industry, company_size, website_url,
+              company_description, company_logo, location
        FROM employer WHERE user_id = ?`,
       [id]
     );

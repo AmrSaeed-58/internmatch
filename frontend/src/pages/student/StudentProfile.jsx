@@ -30,60 +30,55 @@ import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';
 import * as studentAPI from '../../api/student';
 import { computeProfileStrength } from '../../utils/profileStrength';
+import { MAJORS, JORDAN_UNIVERSITIES } from '../../utils/academicData';
 
 const PROFICIENCY_LEVELS = ['beginner', 'intermediate', 'advanced'];
-
-const JORDAN_UNIVERSITIES = [
-  'University of Jordan',
-  'Jordan University of Science and Technology',
-  'Yarmouk University',
-  'Mutah University',
-  'Al al-Bayt University',
-  'The Hashemite University',
-  'Al-Balqa Applied University',
-  'Tafila Technical University',
-  'Al-Hussein Bin Talal University',
-  'German Jordanian University',
-  'Princess Sumaya University for Technology',
-  'Philadelphia University',
-  'Applied Science Private University',
-  'Amman Arab University',
-  'Petra University',
-  'Al-Zaytoonah University of Jordan',
-  'Isra University',
-  'Middle East University',
-  'Jadara University',
-  'Jerash University',
-  'Ajloun National University',
-  'Irbid National University',
-  'American University of Madaba',
-  'Zarqa University',
-  'Al-Ahliyya Amman University',
-  'Luminus Technical University College',
-  'Columbia University - Amman',
-  'Jordan Academy of Music',
-  'Jordan Media Institute',
-];
 
 const GENDER_OPTIONS = ['Male', 'Female'];
 
 const PROFICIENCY_CONFIG = {
   beginner: {
-    pill: 'bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300 ring-1 ring-slate-200/80 dark:ring-slate-700/50',
-    badge: 'bg-slate-500',
+    pill: 'bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-200 ring-1 ring-slate-200/80 dark:ring-slate-700/50',
+    chip: 'bg-slate-200/80 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
+    bar: 'bg-slate-500',
+    barEmpty: 'bg-slate-300/60 dark:bg-slate-600/50',
     label: 'Beginner',
+    level: 1,
   },
   intermediate: {
-    pill: 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 ring-1 ring-primary-200/60 dark:ring-primary-700/40',
-    badge: 'bg-primary-500',
+    pill: 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-200 ring-1 ring-primary-200/60 dark:ring-primary-700/40',
+    chip: 'bg-primary-100 text-primary-700 dark:bg-primary-800/60 dark:text-primary-200',
+    bar: 'bg-primary-500',
+    barEmpty: 'bg-primary-200/60 dark:bg-primary-800/40',
     label: 'Intermediate',
+    level: 2,
   },
   advanced: {
-    pill: 'bg-accent-50 text-accent-700 dark:bg-accent-900/30 dark:text-accent-300 ring-1 ring-accent-200/60 dark:ring-accent-700/40',
-    badge: 'bg-accent-500',
+    pill: 'bg-accent-50 text-accent-700 dark:bg-accent-900/30 dark:text-accent-200 ring-1 ring-accent-200/60 dark:ring-accent-700/40',
+    chip: 'bg-accent-100 text-accent-700 dark:bg-accent-800/60 dark:text-accent-200',
+    bar: 'bg-accent-500',
+    barEmpty: 'bg-accent-200/60 dark:bg-accent-800/40',
     label: 'Advanced',
+    level: 3,
   },
 };
+
+function ProficiencyBars({ level, cfg }) {
+  return (
+    <span
+      className="inline-flex items-end gap-[2px] shrink-0"
+      aria-hidden="true"
+    >
+      {[1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className={`w-[3px] rounded-sm ${i <= level ? cfg.bar : cfg.barEmpty}`}
+          style={{ height: `${4 + i * 2}px` }}
+        />
+      ))}
+    </span>
+  );
+}
 
 function SectionCard({ icon: Icon, title, gradient, action, children }) {
   return (
@@ -287,17 +282,33 @@ export default function StudentProfile() {
   }
 
   async function handleAddSkill() {
-    if (!newSkill.displayName.trim()) return;
+    const inputName = newSkill.displayName.trim();
+    if (!inputName) return;
     try {
-      await studentAPI.addSkills([{
-        skillName: newSkill.displayName.trim(),
+      const apiRes = await studentAPI.addSkills([{
+        skillName: inputName,
         proficiencyLevel: newSkill.proficiencyLevel,
       }]);
+      const { added = [], skipped = [] } = apiRes.data?.data || {};
+
+      if (added.length > 0) {
+        const a = added[0];
+        const note = a.matchedVia === 'semantic' || (a.resolvedName && a.resolvedName.toLowerCase() !== inputName.toLowerCase())
+          ? ` (matched as ${a.resolvedName})`
+          : '';
+        toast.success(`Added "${inputName}"${note}`);
+      } else if (skipped.length > 0) {
+        const s = skipped[0];
+        const matchedNote = s.resolvedName && s.resolvedName.toLowerCase() !== inputName.toLowerCase()
+          ? ` (recognized as "${s.resolvedName}")`
+          : '';
+        toast.info(`"${inputName}" is already in your profile${matchedNote}. Edit the existing skill to change its level.`);
+      }
+
       const res = await studentAPI.getSkills();
       setSkills(res.data.data);
       setNewSkill({ displayName: '', proficiencyLevel: 'intermediate' });
       setShowAddSkill(false);
-      toast.success(`Skill "${newSkill.displayName.trim()}" added`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to add skill');
     }
@@ -328,8 +339,8 @@ export default function StudentProfile() {
     setSaving((s) => ({ ...s, resume: true }));
     try {
       const uploadRes = await studentAPI.uploadResume(file);
-      const staging = uploadRes.data.data;
-      await studentAPI.confirmResume({ staging, confirmedSkills: staging.extractedSkills || [] });
+      const { staging, extractedSkills } = uploadRes.data.data;
+      await studentAPI.confirmResume({ staging, skills: extractedSkills || [] });
       const profileRes = await studentAPI.getProfile();
       setProfile(profileRes.data.data);
       setOriginal(profileRes.data.data);
@@ -582,7 +593,10 @@ export default function StudentProfile() {
                     </SelectInput>
                   </FormField>
                   <FormField label="Major" required>
-                    <TextInput value={profile.major || ''} onChange={(e) => setProfile((p) => ({ ...p, major: e.target.value }))} placeholder="Computer Science" />
+                    <SelectInput value={profile.major || ''} onChange={(e) => setProfile((p) => ({ ...p, major: e.target.value }))}>
+                      <option value="">Select your major</option>
+                      {MAJORS.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </SelectInput>
                   </FormField>
                   <FormField label="GPA">
                     <TextInput
@@ -648,9 +662,10 @@ export default function StudentProfile() {
                   <motion.div
                     key={skill.skillId}
                     whileHover={{ scale: 1.03 }}
+                    title={`${skill.displayName} — ${cfg.label}`}
                     className={`group/skill relative inline-flex items-center gap-2 pl-3 pr-2 py-2 rounded-xl ${cfg.pill} transition-all duration-200 cursor-default`}
                   >
-                    <span className={`w-2 h-2 rounded-full ${cfg.badge} shrink-0`} />
+                    <ProficiencyBars level={cfg.level} cfg={cfg} />
                     <span className="text-xs font-bold leading-none">{skill.displayName}</span>
                     {skill.source === 'extracted' && (
                       <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-md bg-amber-400/20 text-amber-600 dark:text-amber-400 ring-1 ring-amber-300/40 dark:ring-amber-600/30 tracking-wider">
@@ -686,16 +701,18 @@ export default function StudentProfile() {
                   {PROFICIENCY_LEVELS.map((level) => {
                     const cfg = PROFICIENCY_CONFIG[level];
                     const isActive = newSkill.proficiencyLevel === level;
+                    const activeBarCfg = { bar: 'bg-white', barEmpty: 'bg-white/30' };
                     return (
                       <button
                         key={level}
                         onClick={() => setNewSkill((s) => ({ ...s, proficiencyLevel: level }))}
-                        className={`flex-1 py-2 rounded-xl text-[11px] font-bold border transition-all duration-200 cursor-pointer ${
+                        className={`flex-1 py-2 rounded-xl text-[11px] font-bold border transition-all duration-200 cursor-pointer inline-flex items-center justify-center gap-1.5 ${
                           isActive
                             ? 'bg-primary-600 text-white border-primary-600 shadow-glow-sm'
                             : 'border-surface-200 dark:border-surface-600 text-surface-600 dark:text-surface-400 hover:border-primary-300'
                         }`}
                       >
+                        <ProficiencyBars level={cfg.level} cfg={isActive ? activeBarCfg : cfg} />
                         {cfg.label}
                       </button>
                     );

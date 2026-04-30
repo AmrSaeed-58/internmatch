@@ -22,11 +22,11 @@ import * as studentAPI from '../../api/student';
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.06 } } };
 const fadeUp = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 22 } } };
 
-// ── notification type → icon mapping ────────────────────────────────────────────
+// Notification type → icon. Keys must match the literal `type` strings the
+// backend writes into the notification table. See notificationService.js.
 const TYPE_ICON_MAP = {
-  application_received: Bell,
-  application_status_changed: FileText,
-  status_changed: FileText,
+  new_application: Bell,
+  application_status_change: FileText,
   new_message: MessageSquare,
   internship_approved: CheckCircle,
   internship_rejected: XCircle,
@@ -35,9 +35,8 @@ const TYPE_ICON_MAP = {
 };
 
 const TYPE_GRADIENT_MAP = {
-  application_received: 'from-primary-500 to-primary-600',
-  application_status_changed: 'from-amber-500 to-amber-600',
-  status_changed: 'from-amber-500 to-amber-600',
+  new_application: 'from-primary-500 to-primary-600',
+  application_status_change: 'from-amber-500 to-amber-600',
   new_message: 'from-violet-500 to-violet-600',
   internship_approved: 'from-accent-500 to-accent-600',
   internship_rejected: 'from-red-500 to-red-600',
@@ -117,6 +116,7 @@ export default function StudentNotifications() {
       setNotifications((prev) =>
         prev.map((n) => (n.notificationId === id ? { ...n, isRead: true } : n))
       );
+      window.dispatchEvent(new Event('internmatch:notifications-changed'));
     } catch { /* ignore */ }
   }
 
@@ -124,6 +124,7 @@ export default function StudentNotifications() {
     try {
       await studentAPI.markAllNotificationsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      window.dispatchEvent(new Event('internmatch:notifications-changed'));
       toast.success('All notifications marked as read');
     } catch {
       toast.error('Failed to mark notifications as read');

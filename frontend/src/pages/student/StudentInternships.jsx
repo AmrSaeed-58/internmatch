@@ -21,6 +21,8 @@ import DashboardLayout from '../../components/DashboardLayout';
 import InternshipCard from '../../components/InternshipCard';
 import EmptyState from '../../components/EmptyState';
 import * as internshipsAPI from '../../api/internships';
+import { useAuth } from '../../contexts/AuthContext';
+import { getCachedScore, saveCachedScore } from '../../utils/calculatedScores';
 
 const WORK_TYPES = [
   { value: 'remote', label: 'Remote', icon: Wifi },
@@ -56,6 +58,9 @@ const SORT_OPTIONS = [
 const PAGE_SIZE = 12;
 
 export default function StudentInternships() {
+  const { user } = useAuth();
+  const studentUserId = user?.userId;
+
   const [query, setQuery] = useState('');
   const [workType, setWorkType] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
@@ -101,25 +106,34 @@ export default function StudentInternships() {
       const res = await internshipsAPI.getInternships(params);
       const { data, pagination } = res.data;
 
-      setInternships(data.map((item) => ({
-        internshipId: item.internshipId,
-        title: item.title,
-        description: item.description,
-        companyName: item.employer?.companyName,
-        companyLogo: item.employer?.companyLogo,
-        industry: item.employer?.industry,
-        location: item.location,
-        workType: item.workType,
-        durationMonths: item.durationMonths,
-        salaryMin: item.salaryMin,
-        salaryMax: item.salaryMax,
-        deadline: item.deadline,
-        createdAt: item.createdAt,
-        matchScore: item.matchScore,
-        skills: item.skills,
-        relevanceScore: item.relevanceScore,
-        relevanceLabel: item.relevanceLabel,
-      })));
+      setInternships(data.map((item) => {
+        // For internships outside the student's industry, the API returns
+        // matchScore=null. If the student has previously calculated a score
+        // for this internship, hydrate it from the local cache so the
+        // result persists across refreshes.
+        const cached = item.matchScore == null
+          ? getCachedScore(studentUserId, item.internshipId)
+          : null;
+        return {
+          internshipId: item.internshipId,
+          title: item.title,
+          description: item.description,
+          companyName: item.employer?.companyName,
+          companyLogo: item.employer?.companyLogo,
+          industry: item.employer?.industry,
+          location: item.location,
+          workType: item.workType,
+          durationMonths: item.durationMonths,
+          salaryMin: item.salaryMin,
+          salaryMax: item.salaryMax,
+          deadline: item.deadline,
+          createdAt: item.createdAt,
+          matchScore: item.matchScore ?? cached,
+          skills: item.skills,
+          relevanceScore: item.relevanceScore,
+          relevanceLabel: item.relevanceLabel,
+        };
+      }));
       setTotalCount(pagination.total);
       setTotalPages(pagination.totalPages);
     } catch {
@@ -129,7 +143,7 @@ export default function StudentInternships() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedQuery, workType, locationFilter, industryFilter, durationRange, paidOnly, sortBy]);
+  }, [page, debouncedQuery, workType, locationFilter, industryFilter, durationRange, paidOnly, sortBy, studentUserId]);
 
   useEffect(() => {
     fetchInternships();
@@ -158,6 +172,7 @@ export default function StudentInternships() {
         setInternships((prev) => prev.map((it) =>
           it.internshipId === internshipId ? { ...it, matchScore: score } : it
         ));
+        saveCachedScore(studentUserId, internshipId, score);
       }
     } catch {
       /* ignore */

@@ -18,10 +18,11 @@ import DashboardLayout from '../../components/DashboardLayout';
 import EmptyState from '../../components/EmptyState';
 import * as employerAPI from '../../api/employer';
 
+// Notification type → icon. Keys must match the literal `type` strings the
+// backend writes into the notification table. See notificationService.js.
 const TYPE_ICON_MAP = {
-  application_received: Bell,
-  application_status_changed: FileText,
-  status_changed: FileText,
+  new_application: Bell,
+  application_status_change: FileText,
   new_message: MessageSquare,
   internship_approved: CheckCircle,
   internship_rejected: XCircle,
@@ -30,9 +31,8 @@ const TYPE_ICON_MAP = {
 };
 
 const TYPE_GRADIENT_MAP = {
-  application_received: 'from-primary-500 to-primary-600',
-  application_status_changed: 'from-amber-500 to-amber-600',
-  status_changed: 'from-amber-500 to-amber-600',
+  new_application: 'from-primary-500 to-primary-600',
+  application_status_change: 'from-amber-500 to-amber-600',
   new_message: 'from-violet-500 to-violet-600',
   internship_approved: 'from-accent-500 to-accent-600',
   internship_rejected: 'from-red-500 to-red-600',
@@ -63,7 +63,9 @@ function getNotificationLink(notification) {
     case 'application':
       return `/employer/internship/${referenceId}/applicants`;
     case 'internship':
-      return `/internship/${referenceId}`;
+      // Employers manage their own internships — keep them inside the employer
+      // dashboard rather than dropping them onto the public student-facing page.
+      return '/employer/internships';
     case 'message':
       return '/employer/messages';
     default:
@@ -110,6 +112,7 @@ export default function EmployerNotifications() {
       setNotifications((prev) =>
         prev.map((n) => (n.notificationId === id ? { ...n, isRead: true } : n))
       );
+      window.dispatchEvent(new Event('internmatch:notifications-changed'));
     } catch {
       // silent fail for mark-read
     }
@@ -119,6 +122,7 @@ export default function EmployerNotifications() {
     try {
       await employerAPI.markAllNotificationsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      window.dispatchEvent(new Event('internmatch:notifications-changed'));
       toast.success('All notifications marked as read');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to mark all as read');

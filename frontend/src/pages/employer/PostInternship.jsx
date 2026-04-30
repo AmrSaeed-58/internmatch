@@ -14,6 +14,8 @@ import {
   AlertCircle,
   Star,
   Sparkles,
+  Wand2,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -50,6 +52,7 @@ export default function PostInternship() {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
   const [allSkills, setAllSkills] = useState([]);
+  const [extracting, setExtracting] = useState(false);
 
   // Load skills from database
   useEffect(() => {
@@ -115,6 +118,66 @@ export default function PostInternship() {
     setSkills((prev) =>
       prev.map((s) => (s.skillId === id ? { ...s, [field]: value } : s))
     );
+  }
+
+  async function handleExtractSkills() {
+    const text = form.description.trim();
+    if (text.length < 30) {
+      setErrors((prev) => ({
+        ...prev,
+        description: 'Add at least 30 characters of description so AI can extract skills',
+      }));
+      return;
+    }
+    setExtracting(true);
+    try {
+      const res = await employerAPI.extractSkillsFromDescription(text);
+      const incoming = res.data?.data?.skills || [];
+      if (incoming.length === 0) {
+        toast.info('No skills could be extracted — try adding more detail');
+        return;
+      }
+
+      let added = 0;
+      let skipped = 0;
+      setSkills((prev) => {
+        const next = [...prev];
+        const existingDb = new Set(prev.filter((s) => !s.isCustom).map((s) => s.skillId));
+        const existingNames = new Set(
+          prev.map((s) => (s.displayName || '').toLowerCase().trim())
+        );
+
+        for (const item of incoming) {
+          const nameKey = (item.displayName || '').toLowerCase().trim();
+          const isDup = (item.skillId && existingDb.has(item.skillId)) || existingNames.has(nameKey);
+          if (isDup) {
+            skipped += 1;
+            continue;
+          }
+          next.push({
+            skillId: item.skillId || `custom-${Date.now()}-${added}`,
+            displayName: item.displayName,
+            requiredLevel: item.requiredLevel || 'intermediate',
+            isMandatory: item.isMandatory !== false,
+            isCustom: !item.skillId,
+          });
+          existingNames.add(nameKey);
+          added += 1;
+        }
+        return next;
+      });
+
+      setErrors((prev) => ({ ...prev, skills: '' }));
+      const summary = [
+        added > 0 && `Added ${added} skill${added === 1 ? '' : 's'}`,
+        skipped > 0 && `${skipped} already in your list`,
+      ].filter(Boolean).join(' · ');
+      toast.success(summary || 'Skills extracted');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not extract skills');
+    } finally {
+      setExtracting(false);
+    }
   }
 
   function validate() {
@@ -388,9 +451,44 @@ export default function PostInternship() {
                 <h2 className="font-heading font-bold text-surface-900 dark:text-white tracking-tight">Required Skills</h2>
               </div>
               <div className="p-6">
-                <p className="text-xs text-surface-500 dark:text-surface-400 mb-5">
+                <p className="text-xs text-surface-500 dark:text-surface-400 mb-4">
                   Add at least one skill. Set the minimum proficiency level and whether it is mandatory.
                 </p>
+
+                {/* AI Extract from description */}
+                <div className="mb-5 p-4 rounded-xl border border-dashed border-accent-300/60 dark:border-accent-600/40 bg-gradient-to-r from-accent-50/60 to-primary-50/40 dark:from-accent-900/10 dark:to-primary-900/10">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-accent-500 to-primary-600 flex items-center justify-center shrink-0 shadow-sm">
+                      <Wand2 size={15} className="text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-surface-900 dark:text-white mb-0.5">
+                        Auto-extract skills with AI
+                      </p>
+                      <p className="text-xs text-surface-500 dark:text-surface-400 leading-relaxed">
+                        Read the job description above and suggest required skills with the right proficiency level.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleExtractSkills}
+                      disabled={extracting || form.description.trim().length < 30}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-gradient-to-r from-accent-600 to-primary-600 text-white text-xs font-bold hover:from-accent-700 hover:to-primary-700 transition-colors duration-150 cursor-pointer shrink-0 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {extracting ? (
+                        <>
+                          <Loader2 size={13} className="animate-spin" />
+                          Analyzing…
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={13} />
+                          Extract
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
 
                 {/* Skill search */}
                 <div className="relative mb-4">

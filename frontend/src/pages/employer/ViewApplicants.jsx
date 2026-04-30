@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   ChevronDown,
@@ -21,6 +21,7 @@ import StatusBadge from '../../components/StatusBadge';
 import MatchScoreBadge from '../../components/MatchScoreBadge';
 import EmptyState from '../../components/EmptyState';
 import * as employerAPI from '../../api/employer';
+import * as messagesAPI from '../../api/messages';
 
 const STATUS_TRANSITIONS = {
   pending: ['reviewing', 'rejected'],
@@ -57,6 +58,23 @@ function GraduationBadge({ status }) {
 
 export default function ViewApplicants() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const [messagingId, setMessagingId] = useState(null);
+
+  async function handleMessageStudent(studentUserId) {
+    setMessagingId(studentUserId);
+    try {
+      const res = await messagesAPI.createConversation({ otherUserId: studentUserId, internshipId: id });
+      const conversationId = res.data.data?.conversationId;
+      navigate(conversationId ? `/employer/messages?conversation=${conversationId}` : '/employer/messages');
+    } catch {
+      toast.error('Could not open conversation. Please try again.');
+    } finally {
+      setMessagingId(null);
+      setOpenDropdown(null);
+    }
+  }
+
   const [loading, setLoading] = useState(true);
   const [internshipTitle, setInternshipTitle] = useState('');
   const [applicants, setApplicants] = useState([]);
@@ -283,13 +301,13 @@ export default function ViewApplicants() {
                                 >
                                   <Download size={13} /> Download Resume
                                 </button>
-                                <Link
-                                  to="/employer/messages"
-                                  onClick={() => setOpenDropdown(null)}
-                                  className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-700/50 transition-colors duration-100 cursor-pointer"
+                                <button
+                                  onClick={() => handleMessageStudent(applicant.studentUserId)}
+                                  disabled={messagingId === applicant.studentUserId}
+                                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-700/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-100 cursor-pointer text-left"
                                 >
-                                  <MessageSquare size={13} /> Message Student
-                                </Link>
+                                  <MessageSquare size={13} /> {messagingId === applicant.studentUserId ? 'Opening...' : 'Message Student'}
+                                </button>
                                 {transitions.length > 0 && (
                                   <>
                                     <div className="h-px bg-surface-100 dark:bg-surface-700/60 my-1" />

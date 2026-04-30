@@ -779,14 +779,25 @@ function computeSkillScore(requiredSkills, studentSkillMap) {
 
 /**
  * Compute profile completeness bonus (0-1 scale).
+ * Weights only optional fields — mandatory signup fields (full_name, university,
+ * major, graduation_year) are excluded since they're always present and would
+ * force a baseline score of ~40 on every account.
+ *
+ * Total weights sum to 100:
+ *   resume:       30  (drives skill extraction + content matching)
+ *   skills:       25  (5 each, capped at 5 skills)
+ *   bio:          15  (free-text signal for semantic matching)
+ *   linkedin_url: 10
+ *   gpa:           5
+ *   phone:         5
+ *   location:      5
+ *   github_url:    5
  */
 async function computeProfileBonus(studentUserId) {
   const [rows] = await pool.execute(
-    `SELECT s.bio, s.phone, s.linkedin_url, s.gpa, s.location,
-            s.university, s.major, s.graduation_year, s.primary_resume_id,
-            u.full_name
+    `SELECT s.bio, s.phone, s.linkedin_url, s.github_url, s.gpa, s.location,
+            s.primary_resume_id
      FROM student s
-     JOIN users u ON s.user_id = u.user_id
      WHERE s.user_id = ?`,
     [String(studentUserId)]
   );
@@ -795,24 +806,20 @@ async function computeProfileBonus(studentUserId) {
   const p = rows[0];
 
   let score = 0;
-  if (p.full_name) score += 15;
-  if (p.university) score += 10;
-  if (p.major) score += 10;
-  if (p.graduation_year) score += 5;
+  if (p.primary_resume_id) score += 30;
+  if (p.bio && p.bio.trim().length >= 30) score += 15;
+  if (p.linkedin_url) score += 10;
   if (p.gpa) score += 5;
-  if (p.bio) score += 10;
   if (p.phone) score += 5;
-  if (p.linkedin_url) score += 5;
   if (p.location) score += 5;
-  if (p.primary_resume_id) score += 15;
+  if (p.github_url) score += 5;
 
-  // Count skills
+  // Skills: 5 points each, max 5 skills counted (25 pts)
   const [skillRows] = await pool.execute(
     'SELECT COUNT(*) AS count FROM has_skill WHERE student_user_id = ?',
     [String(studentUserId)]
   );
-  const skillCount = skillRows[0].count;
-  score += Math.min(15, skillCount * 3);
+  score += Math.min(25, skillRows[0].count * 5);
 
   return Math.min(100, score) / 100;
 }
@@ -826,4 +833,5 @@ module.exports = {
   computeSkillScore,
   computeProfileBonus,
   formatInternshipListItem,
+  deriveIndustryFromMajor,
 };

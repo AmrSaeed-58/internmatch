@@ -867,10 +867,10 @@ function Footer() {
       { label: 'Analytics', to: '/register' },
     ],
     'Company': [
-      { label: 'About Us', to: '#' },
-      { label: 'Contact', to: '#' },
-      { label: 'Privacy Policy', to: '#' },
-      { label: 'Terms of Service', to: '#' },
+      { label: 'About Us', to: '/about' },
+      { label: 'Contact', to: '/contact' },
+      { label: 'Privacy Policy', to: '/privacy' },
+      { label: 'Terms of Service', to: '/terms' },
     ],
   };
 
@@ -930,9 +930,9 @@ function Footer() {
             &copy; {new Date().getFullYear()} InternMatch. All rights reserved.
           </p>
           <div className="flex items-center gap-6 text-base text-surface-400 dark:text-surface-500">
-            <Link to="#" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">Privacy</Link>
-            <Link to="#" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">Terms</Link>
-            <Link to="#" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">Contact</Link>
+            <Link to="/privacy" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">Privacy</Link>
+            <Link to="/terms" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">Terms</Link>
+            <Link to="/contact" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">Contact</Link>
           </div>
         </div>
       </div>

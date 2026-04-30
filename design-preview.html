@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>InternMatch — Design Preview (3 directions)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600;9..144,800&family=DM+Sans:wght@400;500;700&family=Archivo:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap"
+  rel="stylesheet"
+/>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: #0a0a0a; color: #fff; font-family: system-ui; }
+
+  /* ───────────── nav ───────────── */
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    backdrop-filter: blur(20px); background: rgba(10,10,10,0.7);
+    border-bottom: 1px solid #1f1f1f;
+    padding: 14px 28px; display: flex; justify-content: space-between; align-items: center;
+    font-family: 'DM Sans', sans-serif; font-size: 13px;
+  }
+  .nav strong { letter-spacing: -0.02em; font-weight: 700; }
+  .nav-links { display: flex; gap: 6px; }
+  .nav-links a {
+    color: #888; text-decoration: none; padding: 6px 12px; border-radius: 999px;
+    transition: all .2s; font-weight: 500;
+  }
+  .nav-links a:hover { background: #1f1f1f; color: #fff; }
+  .nav-links a span { opacity: .5; margin-right: 6px; }
+
+  .scene-label {
+    max-width: 1280px; margin: 0 auto; padding: 80px 32px 24px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: #555; letter-spacing: 0.2em; text-transform: uppercase;
+  }
+  .scene-label b { color: #ddd; font-weight: 500; margin-right: 12px; }
+
+  /* ═════════════════════════════════════════════════════════════
+     SCENE 1 — STUDENT / EDITORIAL MAGAZINE
+     ═════════════════════════════════════════════════════════════ */
+  .student {
+    --paper: #FAF6EE;
+    --ink: #1A1714;
+    --terracotta: #C8553D;
+    --sage: #7A8471;
+    --rule: #d8d2c4;
+    background: var(--paper); color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+    padding: 56px 0 80px;
+  }
+  .student .frame { max-width: 1180px; margin: 0 auto; padding: 0 56px; }
+
+  .student .masthead {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 1px solid var(--ink); padding-bottom: 12px;
+  }
+  .student .masthead h1 {
+    font-family: 'Fraunces', serif; font-weight: 800; font-size: 32px;
+    letter-spacing: -0.04em; font-variation-settings: "opsz" 144;
+  }
+  .student .masthead h1 i { font-style: italic; font-weight: 400; }
+  .student .masthead .meta {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.15em; color: #6a655c;
+  }
+
+  .student .issue-bar {
+    display: flex; gap: 48px; padding: 14px 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: 13px; color: #4a463e;
+  }
+  .student .issue-bar span b { color: var(--terracotta); font-weight: 700; }
+
+  .student .feature {
+    display: grid; grid-template-columns: 1fr 1.3fr; gap: 48px;
+    padding: 56px 0; border-bottom: 1px solid var(--rule);
+  }
+  .student .feature .kicker {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--terracotta); letter-spacing: 0.2em; text-transform: uppercase;
+  }
+  .student .feature h2 {
+    font-family: 'Fraunces', serif; font-weight: 400; font-size: 64px;
+    line-height: 0.95; letter-spacing: -0.035em; margin: 18px 0 24px;
+    font-variation-settings: "opsz" 144;
+  }
+  .student .feature h2 i { font-style: italic; color: var(--terracotta); font-weight: 300; }
+  .student .feature .lede {
+    font-family: 'Fraunces', serif; font-size: 19px; line-height: 1.5;
+    color: #3a362f; margin-bottom: 28px;
+  }
+  .student .feature .lede::first-letter {
+    font-size: 64px; float: left; font-weight: 800; line-height: 0.85;
+    margin: 6px 10px -4px 0; color: var(--ink);
+  }
+  .student .byline {
+    display: flex; gap: 24px; align-items: center;
+    font-size: 12px; color: #6a655c;
+  }
+  .student .byline .dot { width: 4px; height: 4px; background: var(--ink); border-radius: 50%; }
+
+  .student .feature-card {
+    background: #fff; border: 1px solid var(--rule); padding: 32px;
+    position: relative;
+  }
+  .student .feature-card .corner {
+    position: absolute; top: -1px; right: -1px;
+    background: var(--ink); color: var(--paper);
+    padding: 6px 14px; font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; letter-spacing: 0.1em;
+  }
+  .student .feature-card h3 {
+    font-family: 'Fraunces', serif; font-size: 28px; line-height: 1.1;
+    letter-spacing: -0.02em; margin: 32px 0 8px;
+  }
+  .student .feature-card .org { color: var(--sage); font-size: 14px; margin-bottom: 24px; }
+  .student .match-bar {
+    display: flex; align-items: baseline; gap: 8px; margin: 16px 0 24px;
+    padding-bottom: 16px; border-bottom: 1px dotted var(--rule);
+  }
+  .student .match-bar .num {
+    font-family: 'Fraunces', serif; font-size: 56px; font-weight: 800;
+    color: var(--terracotta); letter-spacing: -0.04em;
+    font-variation-settings: "opsz" 144;
+  }
+  .student .match-bar .pct { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: #6a655c; }
+  .student .match-bar .label {
+    margin-left: auto; font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--sage);
+  }
+  .student .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+  .student .tag {
+    border: 1px solid var(--ink); padding: 4px 10px; font-size: 11px;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em;
+  }
+  .student .tag.terra { background: var(--terracotta); color: var(--paper); border-color: var(--terracotta); }
+
+  .student .stats-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+    background: var(--rule); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+  }
+  .student .stat {
+    background: var(--paper); padding: 32px 24px;
+  }
+  .student .stat .label {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    letter-spacing: 0.2em; text-transform: uppercase; color: #6a655c; margin-bottom: 12px;
+  }
+  .student .stat .value {
+    font-family: 'Fraunces', serif; font-size: 48px; font-weight: 400;
+    letter-spacing: -0.04em; line-height: 1;
+    font-variation-settings: "opsz" 144;
+  }
+  .student .stat .delta {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--sage); margin-top: 8px;
+  }
+  .student .stat:nth-child(1) .value { color: var(--terracotta); }
+
+  .student .columns {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 32px; margin-top: 48px;
+  }
+  .student .column h4 {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    border-bottom: 1px solid var(--ink); padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .student .column .item {
+    border-bottom: 1px dotted var(--rule); padding: 14px 0;
+  }
+  .student .column .item h5 {
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 17px;
+    line-height: 1.25; letter-spacing: -0.015em; margin-bottom: 4px;
+  }
+  .student .column .item .sub { font-size: 12px; color: #6a655c; }
+  .student .column .item .read { color: var(--terracotta); font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+
+  /* ═════════════════════════════════════════════════════════════
+     SCENE 2 — EMPLOYER / ARCHITECTURAL SWISS
+     ═════════════════════════════════════════════════════════════ */
+  .employer {
+    --bone: #F5F1EA;
+    --black: #1A1A1A;
+    --copper: #B7410E;
+    --inkblue: #1E3A5F;
+    --line: #1A1A1A;
+    background: var(--bone); color: var(--black);
+    font-family: 'Archivo', sans-serif;
+    padding: 0 0 80px;
+  }
+  .employer .frame { max-width: 1280px; margin: 0 auto; padding: 0 40px; }
+
+  .employer .topbar {
+    border-top: 6px solid var(--black); border-bottom: 1px solid var(--black);
+    padding: 18px 0; display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.15em; font-weight: 500;
+  }
+  .employer .topbar .left { display: flex; gap: 32px; align-items: center; }
+  .employer .topbar .logo { font-family: 'Archivo', sans-serif; font-weight: 900; font-size: 18px; letter-spacing: -0.02em; text-transform: none; }
+  .employer .topbar .right { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+
+  .employer .hero {
+    display: grid; grid-template-columns: 4fr 1fr; gap: 0;
+    border-bottom: 1px solid var(--black); padding: 40px 0 56px;
+  }
+  .employer .hero h1 {
+    font-family: 'Archivo', sans-serif; font-weight: 900;
+    font-size: 96px; line-height: 0.92; letter-spacing: -0.045em;
+    text-transform: uppercase;
+  }
+  .employer .hero h1 .copper { color: var(--copper); }
+  .employer .hero h1 sup {
+    font-size: 14px; font-weight: 500; letter-spacing: 0.1em;
+    vertical-align: super; margin-left: 12px;
+    font-family: 'JetBrains Mono', monospace; color: #555;
+  }
+  .employer .hero .meta {
+    border-left: 1px solid var(--black); padding-left: 24px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.15em; color: #555;
+    align-self: end; line-height: 1.8;
+  }
+  .employer .hero .meta b { color: var(--black); display: block; font-weight: 500; }
+
+  .employer .kpi-strip {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    border-bottom: 1px solid var(--black);
+  }
+  .employer .kpi {
+    padding: 36px 28px; border-right: 1px solid var(--black);
+    position: relative;
+  }
+  .employer .kpi:last-child { border-right: none; }
+  .employer .kpi .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 84px; font-weight: 700; letter-spacing: -0.04em;
+    line-height: 1; color: var(--black);
+  }
+  .employer .kpi:nth-child(1) .num { color: var(--copper); }
+  .employer .kpi:nth-child(3) .num { color: var(--inkblue); }
+  .employer .kpi .label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em;
+    margin-top: 16px; font-weight: 500;
+  }
+  .employer .kpi .delta {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: #555; margin-top: 8px;
+  }
+  .employer .kpi .delta b { color: var(--copper); font-weight: 700; }
+
+  .employer .grid-2 {
+    display: grid; grid-template-columns: 1.4fr 1fr; gap: 0;
+    border-bottom: 1px solid var(--black);
+  }
+  .employer .panel { padding: 36px 32px; }
+  .employer .panel.right { border-left: 1px solid var(--black); background: var(--black); color: var(--bone); }
+  .employer .panel h3 {
+    font-family: 'Archivo', sans-serif; font-weight: 900;
+    font-size: 22px; text-transform: uppercase; letter-spacing: -0.02em;
+    padding-bottom: 12px; border-bottom: 2px solid currentColor; margin-bottom: 24px;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .employer .panel h3 .count {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500;
+    letter-spacing: 0.1em; opacity: 0.6;
+  }
+
+  .employer .candidate {
+    display: grid; grid-template-columns: 56px 1fr 80px; gap: 20px;
+    padding: 18px 0; border-bottom: 1px solid #d8d3c8; align-items: center;
+  }
+  .employer .candidate .avatar {
+    width: 56px; height: 56px; background: var(--copper); color: var(--bone);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Archivo', sans-serif; font-weight: 900; font-size: 22px;
+    letter-spacing: -0.02em;
+  }
+  .employer .candidate:nth-child(3) .avatar { background: var(--inkblue); }
+  .employer .candidate:nth-child(4) .avatar { background: var(--black); }
+  .employer .candidate .name { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
+  .employer .candidate .role { font-size: 13px; color: #555; margin-top: 2px; }
+  .employer .candidate .score {
+    font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 28px;
+    text-align: right; color: var(--copper); letter-spacing: -0.03em;
+  }
+
+  .employer .panel.right .post {
+    border-bottom: 1px solid #3a3a3a; padding: 20px 0;
+  }
+  .employer .panel.right .post .title { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+  .employer .panel.right .post .meta {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #999; margin-top: 6px;
+    display: flex; gap: 18px;
+  }
+  .employer .panel.right .post .status {
+    display: inline-block; padding: 2px 8px; background: var(--copper); color: var(--bone);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; font-weight: 700;
+    margin-bottom: 10px;
+  }
+  .employer .panel.right .post .status.draft { background: transparent; border: 1px solid #999; color: #999; }
+
+  .employer .footer-strip {
+    display: grid; grid-template-columns: repeat(6, 1fr);
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    letter-spacing: 0.15em; text-transform: uppercase; color: #555;
+    padding: 18px 0;
+  }
+
+  /* ═════════════════════════════════════════════════════════════
+     SCENE 3 — ADMIN / OPERATOR TERMINAL
+     ═════════════════════════════════════════════════════════════ */
+  .admin {
+    --bg: #0A0E0F;
+    --panel: #16191C;
+    --line: #2A2F36;
+    --phosphor: #80FF9F;
+    --amber: #FFB347;
+    --cyan: #5BC0BE;
+    --dim: #7A8087;
+    --rose: #F2778C;
+    background: var(--bg); color: #cfd2d6;
+    font-family: 'IBM Plex Mono', monospace; font-size: 13px;
+    padding: 0 0 80px; position: relative; overflow: hidden;
+  }
+  .admin::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  .admin::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(128,255,159,0.015) 0 1px, transparent 1px 3px);
+  }
+  .admin .frame { max-width: 1280px; margin: 0 auto; padding: 32px 32px 0; position: relative; z-index: 1; }
+
+  .admin .topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-bottom: 16px; border-bottom: 1px dashed var(--line);
+    font-size: 12px;
+  }
+  .admin .topbar .left { display: flex; gap: 28px; align-items: center; }
+  .admin .topbar .brand {
+    font-weight: 700; color: var(--phosphor); letter-spacing: 0.05em;
+  }
+  .admin .topbar .crumb { color: var(--dim); }
+  .admin .topbar .crumb b { color: #cfd2d6; font-weight: 500; }
+  .admin .topbar .right { color: var(--dim); font-size: 11px; }
+  .admin .topbar .live { color: var(--phosphor); font-weight: 700; }
+  .admin .blink {
+    display: inline-block; width: 8px; height: 14px; background: var(--phosphor);
+    vertical-align: middle; margin-left: 4px; animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .admin .pulse-dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--phosphor); margin-right: 8px;
+    box-shadow: 0 0 8px var(--phosphor); animation: pulse 1.6s ease-in-out infinite;
+  }
+  .admin .pulse-dot.amber { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  .admin .pulse-dot.rose { background: var(--rose); box-shadow: 0 0 8px var(--rose); }
+
+  .admin .hero-row {
+    display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-top: 24px;
+  }
+  .admin .panel-box {
+    border: 1px solid var(--line); background: var(--panel); padding: 20px 22px;
+    position: relative;
+  }
+  .admin .panel-box .header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-bottom: 12px; border-bottom: 1px dashed var(--line); margin-bottom: 16px;
+    font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--dim);
+  }
+  .admin .panel-box .header b { color: var(--phosphor); font-weight: 500; }
+
+  .admin .greeting {
+    font-size: 28px; color: var(--phosphor); font-weight: 700;
+    letter-spacing: -0.01em; margin-bottom: 4px;
+  }
+  .admin .greeting-sub { color: var(--dim); font-size: 12px; }
+  .admin .ascii-status {
+    margin-top: 20px; font-size: 11px; line-height: 1.7; color: var(--dim);
+  }
+  .admin .ascii-status .row { display: grid; grid-template-columns: 130px 1fr 80px; gap: 12px; }
+  .admin .ascii-status .row .key { color: #cfd2d6; }
+  .admin .ascii-status .bar {
+    background: var(--line); position: relative; align-self: center; height: 6px;
+  }
+  .admin .ascii-status .bar i {
+    position: absolute; top: 0; left: 0; bottom: 0; background: var(--phosphor);
+  }
+  .admin .ascii-status .bar.amber i { background: var(--amber); }
+  .admin .ascii-status .bar.cyan i { background: var(--cyan); }
+  .admin .ascii-status .val { text-align: right; color: #cfd2d6; }
+
+  .admin .alert-stack { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+  .admin .alert {
+    padding: 10px 12px; font-size: 12px; line-height: 1.5;
+    border-left: 3px solid; background: rgba(255,255,255,0.02);
+  }
+  .admin .alert.amber { border-color: var(--amber); }
+  .admin .alert.amber .tag { color: var(--amber); }
+  .admin .alert.rose { border-color: var(--rose); }
+  .admin .alert.rose .tag { color: var(--rose); }
+  .admin .alert.cyan { border-color: var(--cyan); }
+  .admin .alert.cyan .tag { color: var(--cyan); }
+  .admin .alert .tag {
+    font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    font-size: 10px; margin-right: 8px;
+  }
+  .admin .alert .ts { color: var(--dim); float: right; font-size: 11px; }
+
+  .admin .grid-4 {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 16px;
+  }
+  .admin .stat {
+    border: 1px solid var(--line); background: var(--panel); padding: 18px;
+  }
+  .admin .stat .label {
+    font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--dim); margin-bottom: 14px;
+  }
+  .admin .stat .value {
+    font-size: 36px; font-weight: 700; letter-spacing: -0.02em;
+    color: #cfd2d6; line-height: 1;
+  }
+  .admin .stat:nth-child(1) .value { color: var(--phosphor); }
+  .admin .stat:nth-child(2) .value { color: var(--cyan); }
+  .admin .stat:nth-child(3) .value { color: var(--amber); }
+  .admin .stat:nth-child(4) .value { color: var(--rose); }
+  .admin .stat .meta {
+    font-size: 10px; color: var(--dim); margin-top: 10px;
+    display: flex; justify-content: space-between;
+  }
+  .admin .stat .meta b { color: #cfd2d6; font-weight: 500; }
+
+  .admin .grid-2 { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; margin-top: 16px; }
+
+  .admin .log {
+    font-size: 11px; line-height: 1.85; color: var(--dim);
+  }
+  .admin .log .ln { display: grid; grid-template-columns: 80px 60px 1fr; gap: 12px; }
+  .admin .log .ts { color: var(--dim); }
+  .admin .log .lvl { font-weight: 700; letter-spacing: 0.05em; }
+  .admin .log .lvl.ok { color: var(--phosphor); }
+  .admin .log .lvl.warn { color: var(--amber); }
+  .admin .log .lvl.info { color: var(--cyan); }
+  .admin .log .lvl.err { color: var(--rose); }
+  .admin .log .msg { color: #cfd2d6; }
+
+  .admin .queue-row {
+    display: grid; grid-template-columns: 1fr 70px 90px;
+    padding: 11px 0; border-bottom: 1px dashed var(--line);
+    font-size: 12px; align-items: center;
+  }
+  .admin .queue-row:last-child { border: none; }
+  .admin .queue-row .who { color: #cfd2d6; }
+  .admin .queue-row .who small { color: var(--dim); display: block; font-size: 10px; margin-top: 2px; }
+  .admin .queue-row .type { color: var(--cyan); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .admin .queue-row .actions { text-align: right; }
+  .admin .btn-mini {
+    border: 1px solid var(--line); background: transparent; color: var(--phosphor);
+    font-family: inherit; font-size: 10px; padding: 4px 8px; cursor: pointer;
+    letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .admin .btn-mini.deny { color: var(--rose); margin-left: 4px; }
+
+  /* footer note */
+  .footer-note {
+    text-align: center; padding: 60px 24px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #666;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    background: #0a0a0a;
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <strong>InternMatch / Design Preview</strong>
+  <div class="nav-links">
+    <a href="#student"><span>01</span>Student / Editorial</a>
+    <a href="#employer"><span>02</span>Employer / Swiss</a>
+    <a href="#admin"><span>03</span>Admin / Operator</a>
+  </div>
+</nav>
+
+<!-- ═════════════ SCENE 1: STUDENT / EDITORIAL ═════════════ -->
+<div class="scene-label" id="student"><b>SCENE 01</b>Student dashboard · Editorial / Magazine direction</div>
+<section class="student">
+  <div class="frame">
+    <div class="masthead">
+      <h1>The <i>Intern</i> Quarterly</h1>
+      <div class="meta">Vol. III · No. 12 · Spring 2026</div>
+    </div>
+    <div class="issue-bar">
+      <span>For the attention of <b>Amr S.</b></span>
+      <span>Computer Science · Year 3</span>
+      <span>Last visit · 2 days ago</span>
+      <span style="margin-left:auto">Profile complete · <b>87%</b></span>
+    </div>
+
+    <div class="feature">
+      <div>
+        <div class="kicker">— Featured Match · 96%</div>
+        <h2>A summer at <i>Stripe,</i> writing the rails for the next billion transactions.</h2>
+        <div class="lede">
+          The product team in Dublin is hiring three engineers for a twelve-week
+          residency on the payments infrastructure. Your profile aligns on Go,
+          distributed systems, and a quiet conviction that financial software
+          should be boring in all the right places.
+        </div>
+        <div class="byline">
+          <span>By the matching desk</span>
+          <span class="dot"></span>
+          <span>Posted 3 hours ago</span>
+          <span class="dot"></span>
+          <span>14 candidates so far</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="corner">96 / 100</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.2em;color:#7A8471;text-transform:uppercase;">
+          Top recommendation
+        </div>
+        <h3>Payments Infrastructure Intern</h3>
+        <div class="org">Stripe · Dublin, IE · Hybrid</div>
+        <div class="match-bar">
+          <span class="num">96</span><span class="pct">/100</span>
+          <span class="label">Match</span>
+        </div>
+        <div class="tags">
+          <span class="tag terra">Go</span>
+          <span class="tag terra">Distributed Sys.</span>
+          <span class="tag">PostgreSQL</span>
+          <span class="tag">Kafka</span>
+          <span class="tag">+3</span>
+        </div>
+        <div style="margin-top:24px;display:flex;gap:8px;">
+          <button style="flex:1;background:#1A1714;color:#FAF6EE;border:none;padding:14px;font-family:inherit;font-weight:500;letter-spacing:0.05em;cursor:pointer;font-size:13px;">Apply now →</button>
+          <button style="background:transparent;border:1px solid #1A1714;padding:14px 18px;font-family:inherit;cursor:pointer;font-size:13px;">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat"><div class="label">— Applications</div><div class="value">12</div><div class="delta">↑ 3 this week</div></div>
+      <div class="stat"><div class="label">— Saved</div><div class="value">28</div><div class="delta">2 closing soon</div></div>
+      <div class="stat"><div class="label">— Replies</div><div class="value">5</div><div class="delta">2 awaiting you</div></div>
+      <div class="stat"><div class="label">— Avg. match</div><div class="value">82</div><div class="delta">+6 since last month</div></div>
+    </div>
+
+    <div class="columns">
+      <div class="column">
+        <h4>— Recommended this week</h4>
+        <div class="item"><h5>Backend Engineer (Intern)</h5><div class="sub">Linear · Remote · 91%</div><div class="read">Read the brief →</div></div>
+        <div class="item"><h5>Infrastructure Resident</h5><div class="sub">Vercel · Berlin · 88%</div><div class="read">Read the brief →</div></div>
+        <div class="item"><h5>SRE Apprentice</h5><div class="sub">Cloudflare · Lisbon · 85%</div><div class="read">Read the brief →</div></div>
+      </div>
+      <div class="column">
+        <h4>— Letters from employers</h4>
+        <div class="item"><h5>Sarah, Linear</h5><div class="sub">"Loved your repo on event sourcing — let's chat."</div></div>
+        <div class="item"><h5>Mateus, Stripe</h5><div class="sub">"Initial review complete. Next round Tuesday?"</div></div>
+        <div class="item"><h5>Julia, Vercel</h5><div class="sub">"Quick technical screen — this Thursday work?"</div></div>
+      </div>
+      <div class="column">
+        <h4>— On your shelf</h4>
+        <div class="item"><h5>Polish your bio</h5><div class="sub">Two paragraphs unlock 12% more matches.</div></div>
+        <div class="item"><h5>Add a portfolio link</h5><div class="sub">+5% profile completeness, +8% trust score.</div></div>
+        <div class="item"><h5>Verify your university</h5><div class="sub">Required for premium employer matches.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════ SCENE 2: EMPLOYER / SWISS ═════════════ -->
+<div class="scene-label" id="employer"><b>SCENE 02</b>Employer dashboard · Architectural / Swiss direction</div>
+<section class="employer">
+  <div class="frame">
+    <div class="topbar">
+      <div class="left">
+        <div class="logo">INTERN<span style="color:var(--copper)">·</span>MATCH</div>
+        <div>Workspace / Acme Corporation</div>
+      </div>
+      <div class="right">26.04.26 / 22:47 GMT+3 / SESSION #4812</div>
+    </div>
+
+    <div class="hero">
+      <div>
+        <h1>Hiring,<br>at <span class="copper">scale.</span><sup>04</sup></h1>
+      </div>
+      <div class="meta">
+        <b>Acme Corporation</b>
+        4 active posts<br>
+        128 applicants<br>
+        12 in review<br>
+        2 offers extended
+      </div>
+    </div>
+
+    <div class="kpi-strip">
+      <div class="kpi">
+        <div class="num">128</div>
+        <div class="label">Applicants — Total</div>
+        <div class="delta"><b>+24</b> this week / <b>+18.2%</b></div>
+      </div>
+      <div class="kpi">
+        <div class="num">94</div>
+        <div class="label">Avg. Match Score</div>
+        <div class="delta">Out of 100 / top decile</div>
+      </div>
+      <div class="kpi">
+        <div class="num">42</div>
+        <div class="label">Conversion Rate</div>
+        <div class="delta">View → apply / <b>+4pt</b></div>
+      </div>
+      <div class="kpi">
+        <div class="num">11</div>
+        <div class="label">Avg. Days to Offer</div>
+        <div class="delta">Down from 18 / <b>−39%</b></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Top Candidates <span class="count">04 / 128</span></h3>
+        <div class="candidate">
+          <div class="avatar">AS</div>
+          <div><div class="name">Amr Saeed</div><div class="role">CS · PSUT · Backend / Distributed Systems</div></div>
+          <div class="score">96</div>
+        </div>
+        <div class="candidate">
+          <div class="avatar">MR</div>
+          <div><div class="name">Maya Rosenthal</div><div class="role">SE · TU Berlin · Platform / Reliability</div></div>
+          <div class="score">93</div>
+        </div>
+        <div class="candidate">
+          <div class="avatar">JK</div>
+          <div><div class="name">Jonas Khoury</div><div class="role">CS · AUB · Full-stack / TypeScript</div></div>
+          <div class="score">90</div>
+        </div>
+        <div class="candidate">
+          <div class="avatar">PC</div>
+          <div><div class="name">Priya Chandrasekar</div><div class="role">DS · IIT Madras · ML / Data</div></div>
+          <div class="score">88</div>
+        </div>
+      </div>
+
+      <div class="panel right">
+        <h3>Active Posts <span class="count">04 / 06</span></h3>
+        <div class="post">
+          <span class="status">Live</span>
+          <div class="title">Backend Engineer Intern</div>
+          <div class="meta"><span>42 applicants</span><span>1.2k views</span><span>11 days</span></div>
+        </div>
+        <div class="post">
+          <span class="status">Live</span>
+          <div class="title">Platform Reliability Intern</div>
+          <div class="meta"><span>38 applicants</span><span>980 views</span><span>8 days</span></div>
+        </div>
+        <div class="post">
+          <span class="status">Live</span>
+          <div class="title">Data Engineering Intern</div>
+          <div class="meta"><span>26 applicants</span><span>720 views</span><span>5 days</span></div>
+        </div>
+        <div class="post">
+          <span class="status draft">Draft</span>
+          <div class="title">Product Engineer Intern</div>
+          <div class="meta"><span>—</span><span>—</span><span>Awaiting publish</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-strip">
+      <span>§ 01 — Hiring</span>
+      <span>§ 02 — Pipeline</span>
+      <span>§ 03 — Analytics</span>
+      <span>§ 04 — Messages</span>
+      <span>§ 05 — Settings</span>
+      <span style="text-align:right">© Acme · 2026</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════ SCENE 3: ADMIN / OPERATOR ═════════════ -->
+<div class="scene-label" id="admin"><b>SCENE 03</b>Admin dashboard · Operator / Terminal direction</div>
+<section class="admin">
+  <div class="frame">
+    <div class="topbar">
+      <div class="left">
+        <div class="brand">internmatch://ops</div>
+        <div class="crumb">~/ <b>dashboard</b></div>
+      </div>
+      <div class="right">
+        <span class="live"><span class="pulse-dot"></span>SYSTEM NOMINAL</span>
+        &nbsp;&nbsp;|&nbsp;&nbsp; uptime 14d 06:21:08 &nbsp;&nbsp;|&nbsp;&nbsp; 26.04.26 22:47:33Z
+      </div>
+    </div>
+
+    <div class="hero-row">
+      <div class="panel-box">
+        <div class="header"><span><b>$</b> ops/welcome.sh</span><span>session: ops-amr-4812</span></div>
+        <div class="greeting">welcome back, operator<span class="blink"></span></div>
+        <div class="greeting-sub">5 items in moderation queue · 2 alerts unread · all services green</div>
+
+        <div class="ascii-status">
+          <div class="row">
+            <span class="key">api.latency.p95</span>
+            <div class="bar"><i style="width:32%"></i></div>
+            <span class="val">128ms</span>
+          </div>
+          <div class="row">
+            <span class="key">db.connections</span>
+            <div class="bar cyan"><i style="width:54%"></i></div>
+            <span class="val">54 / 100</span>
+          </div>
+          <div class="row">
+            <span class="key">queue.depth</span>
+            <div class="bar amber"><i style="width:78%"></i></div>
+            <span class="val">5 pending</span>
+          </div>
+          <div class="row">
+            <span class="key">embed.worker</span>
+            <div class="bar"><i style="width:14%"></i></div>
+            <span class="val">idle</span>
+          </div>
+          <div class="row">
+            <span class="key">storage.used</span>
+            <div class="bar cyan"><i style="width:42%"></i></div>
+            <span class="val">42.1 GB</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-box">
+        <div class="header"><span><b>!</b> alerts.live</span><span>last 24h</span></div>
+        <div class="alert-stack">
+          <div class="alert amber">
+            <span class="tag">WARN</span>3 failed embeddings — re-queued
+            <span class="ts">22:14</span>
+          </div>
+          <div class="alert rose">
+            <span class="tag">FLAG</span>Profile reported by 2 users
+            <span class="ts">19:42</span>
+          </div>
+          <div class="alert cyan">
+            <span class="tag">INFO</span>Daily digest sent · 142 students
+            <span class="ts">08:00</span>
+          </div>
+          <div class="alert amber">
+            <span class="tag">WARN</span>Rate limit hit · /api/match
+            <span class="ts">02:38</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-4">
+      <div class="stat">
+        <div class="label">[01] Users · total</div>
+        <div class="value">1,284</div>
+        <div class="meta"><span>students</span><b>1,142</b></div>
+        <div class="meta"><span>employers</span><b>142</b></div>
+      </div>
+      <div class="stat">
+        <div class="label">[02] Active · 24h</div>
+        <div class="value">387</div>
+        <div class="meta"><span>peak</span><b>21:00</b></div>
+        <div class="meta"><span>vs yest</span><b>+4.2%</b></div>
+      </div>
+      <div class="stat">
+        <div class="label">[03] Pending · queue</div>
+        <div class="value">5</div>
+        <div class="meta"><span>oldest</span><b>2h 14m</b></div>
+        <div class="meta"><span>SLA</span><b>4h</b></div>
+      </div>
+      <div class="stat">
+        <div class="label">[04] Flags · open</div>
+        <div class="value">2</div>
+        <div class="meta"><span>severity</span><b>medium</b></div>
+        <div class="meta"><span>assigned</span><b>—</b></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel-box">
+        <div class="header"><span><b>$</b> tail -f /var/log/system</span><span>auto-refresh 2s</span></div>
+        <div class="log">
+          <div class="ln"><span class="ts">22:47:31</span><span class="lvl ok">OK</span><span class="msg">match.engine recomputed for user#4812 · 18ms</span></div>
+          <div class="ln"><span class="ts">22:47:18</span><span class="lvl info">INFO</span><span class="msg">internship #214 published by acme · review queue +1</span></div>
+          <div class="ln"><span class="ts">22:46:54</span><span class="lvl warn">WARN</span><span class="msg">embed.worker timeout · job#9921 re-queued (attempt 2/3)</span></div>
+          <div class="ln"><span class="ts">22:46:09</span><span class="lvl ok">OK</span><span class="msg">user#1287 registered · email verified · profile bonus 0.42</span></div>
+          <div class="ln"><span class="ts">22:45:42</span><span class="lvl err">ERR</span><span class="msg">smtp.send → 421 · retrying with backup gateway</span></div>
+          <div class="ln"><span class="ts">22:45:11</span><span class="lvl info">INFO</span><span class="msg">cron.daily-digest dispatched · 142 recipients</span></div>
+          <div class="ln"><span class="ts">22:44:38</span><span class="lvl ok">OK</span><span class="msg">application#3041 submitted · score 91 · routed to acme</span></div>
+        </div>
+      </div>
+
+      <div class="panel-box">
+        <div class="header"><span><b>?</b> moderation.queue</span><span>5 items</span></div>
+        <div class="queue-row">
+          <div class="who">Acme · Senior PM Internship<small>posted 14 min ago by emp#42</small></div>
+          <div class="type">post</div>
+          <div class="actions"><button class="btn-mini">OK</button><button class="btn-mini deny">×</button></div>
+        </div>
+        <div class="queue-row">
+          <div class="who">Linear · Backend Intern<small>posted 1h ago by emp#28</small></div>
+          <div class="type">post</div>
+          <div class="actions"><button class="btn-mini">OK</button><button class="btn-mini deny">×</button></div>
+        </div>
+        <div class="queue-row">
+          <div class="who">Reported profile · user#812<small>2 reports — spam</small></div>
+          <div class="type">flag</div>
+          <div class="actions"><button class="btn-mini">OK</button><button class="btn-mini deny">×</button></div>
+        </div>
+        <div class="queue-row">
+          <div class="who">Stripe · IC Eng · Dublin<small>posted 2h ago by emp#11</small></div>
+          <div class="type">post</div>
+          <div class="actions"><button class="btn-mini">OK</button><button class="btn-mini deny">×</button></div>
+        </div>
+        <div class="queue-row">
+          <div class="who">Reported message · conv#291<small>1 report — harassment</small></div>
+          <div class="type">flag</div>
+          <div class="actions"><button class="btn-mini">OK</button><button class="btn-mini deny">×</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="footer-note">
+  · END OF PREVIEW · Three directions, three roles, three identities ·
+</div>
+
+</body>
+</html>

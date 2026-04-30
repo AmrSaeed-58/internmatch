@@ -16,21 +16,11 @@ import {
   Moon,
   AlertCircle,
   CheckCircle2,
-  BookOpen,
   Briefcase,
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import API from '../../api/axios';
-
-const INDUSTRY_OPTIONS = [
-  'Technology',
-  'Finance',
-  'Healthcare',
-  'Education',
-  'Marketing',
-  'Engineering',
-  'Other',
-];
+import { MAJORS, INDUSTRIES as INDUSTRY_OPTIONS, JORDAN_UNIVERSITIES } from '../../utils/academicData';
 
 const COMPANY_SIZE_OPTIONS = [
   '1-50',
@@ -42,39 +32,6 @@ const COMPANY_SIZE_OPTIONS = [
 const GRADUATION_YEARS = Array.from({ length: 8 }, (_, i) => new Date().getFullYear() + i - 1);
 
 const GENDER_OPTIONS = ['Male', 'Female'];
-
-const JORDAN_UNIVERSITIES = [
-  'University of Jordan',
-  'Jordan University of Science and Technology',
-  'Yarmouk University',
-  'Mutah University',
-  'Al al-Bayt University',
-  'The Hashemite University',
-  'Al-Balqa Applied University',
-  'Tafila Technical University',
-  'Al-Hussein Bin Talal University',
-  'German Jordanian University',
-  'Princess Sumaya University for Technology',
-  'Philadelphia University',
-  'Applied Science Private University',
-  'Amman Arab University',
-  'Petra University',
-  'Al-Zaytoonah University of Jordan',
-  'Isra University',
-  'Middle East University',
-  'Jadara University',
-  'Jerash University',
-  'Ajloun National University',
-  'Irbid National University',
-  'American University of Madaba',
-  'Zarqa University',
-  'Al-Ahliyya Amman University',
-  'Luminus Technical University College',
-  'PSUT (Princess Sumaya University for Technology)',
-  'Columbia University - Amman',
-  'Jordan Academy of Music',
-  'Jordan Media Institute',
-];
 
 // ─── Password strength indicator ──────────────────────────────────────────────
 function PasswordStrength({ password }) {
@@ -280,13 +237,13 @@ function StudentForm({ onSuccess }) {
           </select>
         </Field>
         <Field id="s-major" label="Major" error={errors.major} required>
-          <div className="relative group">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg bg-surface-100 dark:bg-surface-700 flex items-center justify-center pointer-events-none group-focus-within:bg-primary-50 dark:group-focus-within:bg-primary-900/30 transition-colors duration-200">
-              <BookOpen size={13} className="text-surface-400 group-focus-within:text-primary-500 dark:group-focus-within:text-primary-400 transition-colors duration-200" />
-            </div>
-            <input id="s-major" name="major" type="text" value={form.major} onChange={handleChange}
-              placeholder="Computer Science" className={`${inputCls(!!errors.major)} pl-12`} />
-          </div>
+          <select id="s-major" name="major" value={form.major} onChange={handleChange}
+            className={selectCls(!!errors.major)}>
+            <option value="">Select your major</option>
+            {MAJORS.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
         </Field>
       </div>
 

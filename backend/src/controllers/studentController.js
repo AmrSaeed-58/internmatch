@@ -5,6 +5,7 @@ const pool = require('../config/db');
 const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 const embeddingService = require('../utils/embeddingService');
+const { findOrCreateSkill } = require('../utils/skillResolver');
 
 const BCRYPT_SALT_ROUNDS = 12;
 const uploadDir = process.env.UPLOAD_DIR || './uploads';
@@ -323,9 +324,13 @@ const confirmResume = catchAsync(async (req, res) => {
       [newResumeId, userId]
     );
 
-    // Save confirmed skills
+    // Save confirmed skills.
+    //
+    // Two rules to prevent silent data loss:
+    //   1. Clear ONLY the previous extracted-source rows. Manual rows are kept.
+    //   2. When inserting an extracted skill, never overwrite a manual row
+    //      that already exists for the same skill_id (the student curated it).
     if (skills && skills.length > 0) {
-      // Clear old extracted skills
       await connection.execute(
         "DELETE FROM has_skill WHERE student_user_id = ? AND source = 'extracted'",
         [userId]
@@ -334,30 +339,15 @@ const confirmResume = catchAsync(async (req, res) => {
       for (const skill of skills) {
         let skillId = skill.skillId;
 
-        // If new skill (no ID), insert into skill table
         if (!skillId) {
-          const normalizedName = normalizeSkillName(skill.skillName);
-          // Check if already exists by normalized name
-          const [existing] = await connection.execute(
-            'SELECT skill_id FROM skill WHERE normalized_name = ?',
-            [normalizedName]
-          );
-          if (existing.length > 0) {
-            skillId = existing[0].skill_id;
-          } else {
-            const [inserted] = await connection.execute(
-              'INSERT INTO skill (display_name, normalized_name, category) VALUES (?, ?, ?)',
-              [skill.skillName, normalizedName, skill.category || 'other']
-            );
-            skillId = inserted.insertId;
-          }
+          const resolved = await findOrCreateSkill(connection, skill.skillName, skill.category || 'other');
+          skillId = resolved.skillId;
         }
 
-        // Insert into has_skill (ignore duplicates)
+        // INSERT IGNORE so we never clobber a pre-existing (manual) row.
         await connection.execute(
-          `INSERT INTO has_skill (student_user_id, skill_id, proficiency_level, source)
-           VALUES (?, ?, ?, 'extracted')
-           ON DUPLICATE KEY UPDATE proficiency_level = VALUES(proficiency_level), source = 'extracted'`,
+          `INSERT IGNORE INTO has_skill (student_user_id, skill_id, proficiency_level, source)
+           VALUES (?, ?, ?, 'extracted')`,
           [userId, skillId, skill.proficiencyLevel || 'intermediate']
         );
       }
@@ -514,6 +504,12 @@ const getSkills = catchAsync(async (req, res) => {
 });
 
 // ── POST /api/student/skills ─────────────────────────────────────────────────────
+//
+// Adds skills WITHOUT overwriting existing ones. If a skill resolves (via
+// alias or semantic match) to one the student already has, it is skipped
+// rather than silently downgrading the previously-set proficiency. The
+// caller gets a per-skill report so the UI can surface what actually
+// happened.
 const addSkills = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { skills } = req.body;
@@ -522,46 +518,67 @@ const addSkills = catchAsync(async (req, res) => {
     throw new AppError('Skills array is required', 400);
   }
 
+  const added = [];
+  const skipped = [];
+
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
     for (const skill of skills) {
+      const inputName = skill.skillName || (skill.skillId ? `#${skill.skillId}` : null);
       let skillId = skill.skillId;
+      let resolvedName = skill.skillName;
+      let matchedVia = 'id';
 
       if (!skillId && skill.skillName) {
-        const normalizedName = normalizeSkillName(skill.skillName);
-        const [existing] = await connection.execute(
-          'SELECT skill_id FROM skill WHERE normalized_name = ?',
-          [normalizedName]
-        );
-        if (existing.length > 0) {
-          skillId = existing[0].skill_id;
-        } else {
-          const [inserted] = await connection.execute(
-            'INSERT INTO skill (display_name, normalized_name, category) VALUES (?, ?, ?)',
-            [skill.skillName, normalizedName, skill.category || 'other']
-          );
-          skillId = inserted.insertId;
-        }
+        const resolved = await findOrCreateSkill(connection, skill.skillName, skill.category || 'other');
+        skillId = resolved.skillId;
+        resolvedName = resolved.displayName;
+        matchedVia = resolved.matchedVia;
       }
 
-      if (skillId) {
-        await connection.execute(
-          `INSERT INTO has_skill (student_user_id, skill_id, proficiency_level, source)
-           VALUES (?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE proficiency_level = VALUES(proficiency_level)`,
-          [userId, skillId, skill.proficiencyLevel || 'intermediate', skill.source || 'manual']
-        );
+      if (!skillId) continue;
+
+      const [existing] = await connection.execute(
+        'SELECT proficiency_level FROM has_skill WHERE student_user_id = ? AND skill_id = ?',
+        [userId, skillId]
+      );
+
+      if (existing.length > 0) {
+        skipped.push({
+          inputName,
+          resolvedName,
+          matchedVia,
+          existingProficiency: existing[0].proficiency_level,
+          reason: matchedVia === 'exact' || matchedVia === 'id'
+            ? 'already_in_profile'
+            : 'matched_existing_skill',
+        });
+        continue;
       }
+
+      await connection.execute(
+        `INSERT INTO has_skill (student_user_id, skill_id, proficiency_level, source)
+         VALUES (?, ?, ?, ?)`,
+        [userId, skillId, skill.proficiencyLevel || 'intermediate', skill.source || 'manual']
+      );
+      added.push({ inputName, resolvedName, skillId, matchedVia });
     }
 
     await connection.commit();
 
-    // Fire-and-forget: regenerate student embedding after skills change
-    embeddingService.updateStudentEmbedding(userId).catch(() => {});
+    if (added.length > 0) {
+      embeddingService.updateStudentEmbedding(userId).catch(() => {});
+    }
 
-    res.json({ success: true, message: 'Skills added successfully' });
+    res.json({
+      success: true,
+      message: added.length > 0
+        ? `Added ${added.length} skill${added.length === 1 ? '' : 's'}`
+        : 'No new skills added',
+      data: { added, skipped },
+    });
   } catch (err) {
     await connection.rollback();
     throw err;
@@ -1232,7 +1249,7 @@ const applyToInternship = catchAsync(async (req, res) => {
   // Push real-time notification via Socket.IO if available
   const io = req.app.get('io');
   if (io) {
-    io.to(String(internship.employer_user_id)).emit('notification:new', {
+    io.to(`user:${internship.employer_user_id}`).emit('notification:new', {
       type: 'new_application',
       title: `New application for "${internship.title}"`,
       referenceId: applicationId,
@@ -1422,7 +1439,7 @@ const removeBookmark = catchAsync(async (req, res) => {
 // ── GET /api/student/recommendations ─────────────────────────────────────────────
 const getRecommendations = catchAsync(async (req, res) => {
   const { userId } = req.user;
-  const { page = 1, limit = 20, minScore = 0 } = req.query;
+  const { page = 1, limit = 20, minScore = 0, scope = 'industry' } = req.query;
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
   const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
   const minScoreNum = Math.max(0, Math.min(100, parseInt(minScore, 10) || 0));
@@ -1431,9 +1448,27 @@ const getRecommendations = catchAsync(async (req, res) => {
     computeSkillScore,
     computeProfileBonus,
     formatInternshipListItem,
+    deriveIndustryFromMajor,
   } = require('./internshipController');
 
-  // Get all active visible internships
+  // Resolve student's industry from major when scope=industry (default)
+  let studentIndustry = null;
+  if (scope === 'industry') {
+    const [studentRows] = await pool.execute(
+      'SELECT major FROM student WHERE user_id = ?',
+      [String(userId)]
+    );
+    studentIndustry = studentRows[0] ? deriveIndustryFromMajor(studentRows[0].major) : null;
+  }
+
+  // Get all active visible internships, optionally filtered by industry
+  let industryClause = '';
+  const queryParams = [];
+  if (scope === 'industry' && studentIndustry) {
+    industryClause = ' AND e.industry = ?';
+    queryParams.push(studentIndustry);
+  }
+
   const [internships] = await pool.execute(
     `SELECT
        i.internship_id, i.title, i.description, i.location,
@@ -1445,7 +1480,9 @@ const getRecommendations = catchAsync(async (req, res) => {
      JOIN users u_emp ON e.user_id = u_emp.user_id AND u_emp.is_active = TRUE
      WHERE i.status = 'active'
        AND (i.deadline IS NULL OR i.deadline >= CURDATE())
-     ORDER BY i.created_at DESC`
+       ${industryClause}
+     ORDER BY i.created_at DESC`,
+    queryParams
   );
 
   if (internships.length === 0) {
@@ -1578,6 +1615,7 @@ const getRecommendations = catchAsync(async (req, res) => {
   res.json({
     success: true,
     data: paged,
+    meta: { scope, studentIndustry },
     pagination: {
       page: pageNum,
       limit: limitNum,

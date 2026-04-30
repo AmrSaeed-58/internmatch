@@ -278,10 +278,11 @@ const sendMessage = catchAsync(async (req, res) => {
     createdAt: new Date().toISOString(),
   };
 
-  // Emit via Socket.IO to recipient
+  // Emit via Socket.IO to both parties — recipient receives the new message,
+  // sender's other tabs receive it too so they stay in sync.
   const io = req.app.get('io');
   if (io) {
-    io.to(`user:${otherUserId}`).emit('message:receive', messageData);
+    io.to(`user:${userId}`).to(`user:${otherUserId}`).emit('message:receive', messageData);
   }
 
   // Create notification (with preference-based email) for the other user

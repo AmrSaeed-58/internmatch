@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   BellRing,
   MessagesSquare,
@@ -56,6 +56,7 @@ export default function Navbar({ onMenuToggle, mobileMenuOpen }) {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -81,20 +82,75 @@ export default function Navbar({ onMenuToggle, mobileMenuOpen }) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  // Fetch recent notifications for the dropdown
-  useEffect(() => {
+  // Fetch recent notifications — runs on mount, role change, route change, window focus,
+  // a periodic poll, and a custom event dispatched by notification pages.
+  const fetchNotifs = useCallback(async () => {
     if (!user) return;
-    async function fetchNotifs() {
-      try {
-        let res;
-        if (role === 'student') res = await studentAPI.getNotifications({ limit: 5 });
-        else if (role === 'employer') res = await employerAPI.getNotifications({ limit: 5 });
-        else if (role === 'admin') res = await adminAPI.getNotifications({ limit: 5 });
-        if (res) setNotifications(res.data.data || []);
-      } catch { /* ignore */ }
-    }
-    fetchNotifs();
+    try {
+      let res;
+      if (role === 'student') res = await studentAPI.getNotifications({ limit: 5 });
+      else if (role === 'employer') res = await employerAPI.getNotifications({ limit: 5 });
+      else if (role === 'admin') res = await adminAPI.getNotifications({ limit: 5 });
+      if (res) setNotifications(res.data.data || []);
+    } catch { /* ignore */ }
   }, [user, role]);
+
+  useEffect(() => {
+    fetchNotifs();
+  }, [fetchNotifs, location.pathname]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    const interval = setInterval(fetchNotifs, 30000);
+    const onFocus = () => fetchNotifs();
+    const onCustom = () => fetchNotifs();
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('internmatch:notifications-changed', onCustom);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('internmatch:notifications-changed', onCustom);
+    };
+  }, [fetchNotifs, user]);
+
+  const markRead = useCallback(async (id) => {
+    try {
+      if (role === 'student') await studentAPI.markNotificationRead(id);
+      else if (role === 'employer') await employerAPI.markNotificationRead(id);
+      else if (role === 'admin') await adminAPI.markNotificationRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.notificationId === id ? { ...n, isRead: true } : n))
+      );
+      window.dispatchEvent(new Event('internmatch:notifications-changed'));
+    } catch { /* ignore */ }
+  }, [role]);
+
+  const markAllRead = useCallback(async () => {
+    try {
+      if (role === 'student') await studentAPI.markAllNotificationsRead();
+      else if (role === 'employer') await employerAPI.markAllNotificationsRead();
+      else if (role === 'admin') await adminAPI.markAllNotificationsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      window.dispatchEvent(new Event('internmatch:notifications-changed'));
+    } catch { /* ignore */ }
+  }, [role]);
+
+  function getNotificationLink(n) {
+    switch (n.referenceType) {
+      case 'application': return role === 'employer' ? '/employer/internships' : '/student/applications';
+      case 'internship': return n.referenceId ? `/internship/${n.referenceId}` : null;
+      case 'message': return `/${role}/messages`;
+      case 'user': return role === 'admin' ? '/admin/users' : null;
+      default: return null;
+    }
+  }
+
+  function handleDropdownItemClick(n) {
+    if (!n.isRead) markRead(n.notificationId);
+    const link = getNotificationLink(n);
+    setNotifOpen(false);
+    if (link) navigate(link);
+  }
 
   // Fetch unread message count
   useEffect(() => {
@@ -174,7 +230,11 @@ export default function Navbar({ onMenuToggle, mobileMenuOpen }) {
                     Notifications
                   </span>
                   {unreadNotifs > 0 && (
-                    <button className="text-xs text-primary-600 dark:text-primary-400 font-medium hover:underline cursor-pointer">
+                    <button
+                      type="button"
+                      onClick={markAllRead}
+                      className="text-xs text-primary-600 dark:text-primary-400 font-medium hover:underline cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 rounded"
+                    >
                       Mark all read
                     </button>
                   )}
@@ -186,9 +246,11 @@ export default function Navbar({ onMenuToggle, mobileMenuOpen }) {
                     </div>
                   ) : (
                     notifications.map((n) => (
-                      <div
+                      <button
                         key={n.notificationId}
-                        className={`px-4 py-3 flex gap-3 hover:bg-surface-50 dark:hover:bg-surface-700/40 transition-colors duration-150 cursor-pointer ${
+                        type="button"
+                        onClick={() => handleDropdownItemClick(n)}
+                        className={`w-full text-left px-4 py-3 flex gap-3 hover:bg-surface-50 dark:hover:bg-surface-700/40 transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:bg-surface-50 dark:focus-visible:bg-surface-700/40 ${
                           !n.isRead ? 'bg-primary-50/40 dark:bg-primary-900/10' : ''
                         }`}
                       >
@@ -204,7 +266,7 @@ export default function Navbar({ onMenuToggle, mobileMenuOpen }) {
                             {timeAgo(n.createdAt)}
                           </span>
                         </div>
-                      </div>
+                      </button>
                     ))
                   )}
                 </div>
