@@ -10,7 +10,6 @@ const { findOrCreateSkill } = require('../utils/skillResolver');
 const BCRYPT_SALT_ROUNDS = 12;
 const uploadDir = process.env.UPLOAD_DIR || './uploads';
 
-// ── GET /api/student/profile ─────────────────────────────────────────────────────
 const getProfile = catchAsync(async (req, res) => {
   const { userId } = req.user;
 
@@ -33,13 +32,11 @@ const getProfile = catchAsync(async (req, res) => {
   const s = studentRows[0];
   const currentYear = new Date().getFullYear();
 
-  // Get skill count
   const [skillCount] = await pool.execute(
     'SELECT COUNT(*) AS count FROM has_skill WHERE student_user_id = ?',
     [userId]
   );
 
-  // Get resume info if exists
   let resume = null;
   if (s.primary_resume_id) {
     const [resumeRows] = await pool.execute(
@@ -51,7 +48,7 @@ const getProfile = catchAsync(async (req, res) => {
         resumeId: resumeRows[0].resume_id,
         originalFilename: resumeRows[0].original_filename,
         fileType: resumeRows[0].file_type,
-        uploadedAt: resumeRows[0].created_at,
+        createdAt: resumeRows[0].created_at,
       };
     }
   }
@@ -86,7 +83,6 @@ const getProfile = catchAsync(async (req, res) => {
   });
 });
 
-// ── PUT /api/student/profile ─────────────────────────────────────────────────────
 const updateProfile = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const {
@@ -98,7 +94,6 @@ const updateProfile = catchAsync(async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    // Update users table
     if (fullName !== undefined) {
       await connection.execute(
         'UPDATE users SET full_name = ? WHERE user_id = ?',
@@ -106,7 +101,6 @@ const updateProfile = catchAsync(async (req, res) => {
       );
     }
 
-    // Build student update dynamically
     const studentFields = [];
     const studentValues = [];
 
@@ -156,7 +150,6 @@ const updateProfile = catchAsync(async (req, res) => {
   }
 });
 
-// ── POST /api/student/profile/picture ────────────────────────────────────────────
 const uploadProfilePicture = catchAsync(async (req, res) => {
   const { userId } = req.user;
 
@@ -166,7 +159,6 @@ const uploadProfilePicture = catchAsync(async (req, res) => {
 
   const filePath = `/uploads/profiles/${req.file.filename}`;
 
-  // Get old picture path to delete
   const [oldRows] = await pool.execute(
     'SELECT profile_picture FROM users WHERE user_id = ?',
     [userId]
@@ -190,7 +182,6 @@ const uploadProfilePicture = catchAsync(async (req, res) => {
   });
 });
 
-// ── DELETE /api/student/profile/picture ───────────────────────────────────────────
 const deleteProfilePicture = catchAsync(async (req, res) => {
   const { userId } = req.user;
 
@@ -215,7 +206,6 @@ const deleteProfilePicture = catchAsync(async (req, res) => {
   res.json({ success: true, message: 'Profile picture removed' });
 });
 
-// ── POST /api/student/resume/upload (Phase 1 — staged) ──────────────────────────
 const uploadResume = catchAsync(async (req, res) => {
   const { userId } = req.user;
 
@@ -228,7 +218,6 @@ const uploadResume = catchAsync(async (req, res) => {
   const ext = path.extname(originalFilename).toLowerCase().replace('.', '');
   const fileType = ext === 'pdf' ? 'pdf' : 'docx';
 
-  // Extract text from resume
   let extractedText = '';
   const fullPath = path.resolve(uploadDir, 'resumes', req.file.filename);
 
@@ -273,7 +262,6 @@ const uploadResume = catchAsync(async (req, res) => {
   });
 });
 
-// ── POST /api/student/resume/confirm ─────────────────────────────────────────────
 const confirmResume = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { staging, skills } = req.body;
@@ -286,7 +274,6 @@ const confirmResume = catchAsync(async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    // Get old resume if exists
     const [oldResume] = await connection.execute(
       'SELECT resume_id, file_path FROM resume WHERE student_user_id = ?',
       [userId]
@@ -304,14 +291,12 @@ const confirmResume = catchAsync(async (req, res) => {
         'UPDATE application SET resume_id = NULL WHERE resume_id = ?',
         [oldResume[0].resume_id]
       );
-      // Delete old resume record
       await connection.execute(
         'DELETE FROM resume WHERE resume_id = ?',
         [oldResume[0].resume_id]
       );
     }
 
-    // Insert new resume
     const [insertResult] = await connection.execute(
       'INSERT INTO resume (student_user_id, file_path, original_filename, file_type) VALUES (?, ?, ?, ?)',
       [userId, staging.filePath, staging.originalFilename, staging.fileType]
@@ -383,7 +368,6 @@ const confirmResume = catchAsync(async (req, res) => {
   }
 });
 
-// ── GET /api/student/resume ──────────────────────────────────────────────────────
 const getResume = catchAsync(async (req, res) => {
   const { userId } = req.user;
 
@@ -412,7 +396,6 @@ const getResume = catchAsync(async (req, res) => {
   });
 });
 
-// ── DELETE /api/student/resume ───────────────────────────────────────────────────
 const deleteResume = catchAsync(async (req, res) => {
   const { userId } = req.user;
 
@@ -458,7 +441,6 @@ const deleteResume = catchAsync(async (req, res) => {
     connection.release();
   }
 
-  // Delete file if no applications reference it
   if (filePath) {
     const [refs] = await pool.execute(
       'SELECT COUNT(*) AS count FROM application WHERE submitted_resume_path = ?',
@@ -476,7 +458,6 @@ const deleteResume = catchAsync(async (req, res) => {
   res.json({ success: true, message: 'Resume deleted' });
 });
 
-// ── GET /api/student/skills ──────────────────────────────────────────────────────
 const getSkills = catchAsync(async (req, res) => {
   const { userId } = req.user;
 
@@ -503,7 +484,6 @@ const getSkills = catchAsync(async (req, res) => {
   });
 });
 
-// ── POST /api/student/skills ─────────────────────────────────────────────────────
 //
 // Adds skills WITHOUT overwriting existing ones. If a skill resolves (via
 // alias or semantic match) to one the student already has, it is skipped
@@ -587,7 +567,6 @@ const addSkills = catchAsync(async (req, res) => {
   }
 });
 
-// ── PUT /api/student/skills/:skillId ─────────────────────────────────────────────
 const updateSkill = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { skillId } = req.params;
@@ -608,7 +587,6 @@ const updateSkill = catchAsync(async (req, res) => {
   res.json({ success: true, message: 'Skill updated' });
 });
 
-// ── DELETE /api/student/skills/:skillId ──────────────────────────────────────────
 const deleteSkill = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { skillId } = req.params;
@@ -628,7 +606,6 @@ const deleteSkill = catchAsync(async (req, res) => {
   res.json({ success: true, message: 'Skill removed' });
 });
 
-// ── PUT /api/student/change-password ─────────────────────────────────────────────
 const changePassword = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { currentPassword, newPassword } = req.body;
@@ -668,7 +645,6 @@ const changePassword = catchAsync(async (req, res) => {
   });
 });
 
-// ── GET /api/student/notification-preferences ────────────────────────────────────
 const getNotificationPreferences = catchAsync(async (req, res) => {
   const { userId } = req.user;
 
@@ -691,7 +667,6 @@ const getNotificationPreferences = catchAsync(async (req, res) => {
   });
 });
 
-// ── PUT /api/student/notification-preferences ────────────────────────────────────
 const updateNotificationPreferences = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { emailApplicationStatus, emailNewMessage, emailRecommendations, emailInvitation } = req.body;
@@ -715,7 +690,6 @@ const updateNotificationPreferences = catchAsync(async (req, res) => {
   res.json({ success: true, message: 'Notification preferences updated' });
 });
 
-// ── GET /api/student/notifications ──────────────────────────────────────────────
 const getNotifications = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { page = 1, limit = 20, unread } = req.query;
@@ -766,7 +740,6 @@ const getNotifications = catchAsync(async (req, res) => {
   });
 });
 
-// ── PUT /api/student/notifications/:id/read ────────────────────────────────────
 const markNotificationRead = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { id } = req.params;
@@ -781,7 +754,6 @@ const markNotificationRead = catchAsync(async (req, res) => {
   res.json({ success: true, message: 'Notification marked as read' });
 });
 
-// ── PUT /api/student/notifications/read-all ────────────────────────────────────
 const markAllNotificationsRead = catchAsync(async (req, res) => {
   const { userId } = req.user;
 
@@ -793,7 +765,6 @@ const markAllNotificationsRead = catchAsync(async (req, res) => {
   res.json({ success: true, message: 'All notifications marked as read' });
 });
 
-// ── DELETE /api/student/account ──────────────────────────────────────────────────
 const deleteAccount = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { password } = req.body;
@@ -809,7 +780,6 @@ const deleteAccount = catchAsync(async (req, res) => {
   const match = await bcrypt.compare(password, rows[0].password);
   if (!match) throw new AppError('Incorrect password', 401);
 
-  // Get files to clean up
   const [resumeRows] = await pool.execute(
     'SELECT file_path FROM resume WHERE student_user_id = ?',
     [userId]
@@ -833,8 +803,6 @@ const deleteAccount = catchAsync(async (req, res) => {
   res.json({ success: true, message: 'Account deleted permanently' });
 });
 
-// ── Helpers ──────────────────────────────────────────────────────────────────────
-
 // Canonical skill name aliases
 const SKILL_ALIASES = {
   'c++': 'cpp',
@@ -847,7 +815,6 @@ const SKILL_ALIASES = {
 
 function normalizeSkillName(name) {
   let normalized = name.toLowerCase().trim();
-  // Check aliases first
   if (SKILL_ALIASES[normalized]) return SKILL_ALIASES[normalized];
   // Generic: lowercase, strip spaces/dots/hyphens/underscores/slashes (but not all special chars)
   normalized = normalized.replace(/[\s.\-_/]/g, '');
@@ -926,7 +893,6 @@ ${text.substring(0, 3000)}`;
 async function fallbackSkillExtraction(text) {
   if (!text) return [];
 
-  // Get all skills from DB
   const [allSkills] = await pool.execute(
     'SELECT skill_id, display_name, normalized_name, category FROM skill'
   );
@@ -953,14 +919,8 @@ async function fallbackSkillExtraction(text) {
   return results;
 }
 
-// ── Applications ──────────────────────────────────────────────────────────────
-
 const WITHDRAWABLE_STATUSES = ['pending', 'under_review', 'interview_scheduled'];
 
-/**
- * GET /api/student/applications
- * List all student's applications (paginated, filterable by status, sortable by date).
- */
 const getApplications = catchAsync(async (req, res) => {
   const studentId = req.user.userId;
   const { page = 1, limit = 20, status, sort = 'newest' } = req.query;
@@ -979,7 +939,20 @@ const getApplications = catchAsync(async (req, res) => {
 
   const whereSQL = whereClauses.join(' AND ');
 
-  const orderSQL = sort === 'oldest' ? 'a.applied_date ASC' : 'a.applied_date DESC';
+  let orderSQL;
+  switch (sort) {
+    case 'oldest':
+      orderSQL = 'a.applied_date ASC';
+      break;
+    case 'score_high':
+      orderSQL = 'a.match_score IS NULL, a.match_score DESC';
+      break;
+    case 'score_low':
+      orderSQL = 'a.match_score IS NULL, a.match_score ASC';
+      break;
+    default:
+      orderSQL = 'a.applied_date DESC';
+  }
 
   const [countRows] = await pool.execute(
     `SELECT COUNT(*) AS total FROM application a WHERE ${whereSQL}`,
@@ -1035,10 +1008,6 @@ const getApplications = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * GET /api/student/applications/:id
- * Get full application details.
- */
 const getApplication = catchAsync(async (req, res) => {
   const studentId = req.user.userId;
   const { id } = req.params;
@@ -1099,10 +1068,6 @@ const getApplication = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * GET /api/student/applications/:id/history
- * Get full status history for an application.
- */
 const getApplicationHistory = catchAsync(async (req, res) => {
   const studentId = req.user.userId;
   const { id } = req.params;
@@ -1140,20 +1105,14 @@ const getApplicationHistory = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * POST /api/student/applications
- * Apply to an internship.
- */
 const applyToInternship = catchAsync(async (req, res) => {
   const studentId = req.user.userId;
   const { internshipId, coverLetter } = req.body;
 
-  // Validate internship ID
   if (!internshipId) {
     throw new AppError('Internship ID is required', 400);
   }
 
-  // Check student has resume
   const [resumeRows] = await pool.execute(
     'SELECT primary_resume_id FROM student WHERE user_id = ?',
     [String(studentId)]
@@ -1162,7 +1121,6 @@ const applyToInternship = catchAsync(async (req, res) => {
     throw new AppError('Upload a resume before applying', 400);
   }
 
-  // Get resume info
   const [resumeInfo] = await pool.execute(
     'SELECT resume_id, file_path, original_filename FROM resume WHERE resume_id = ? AND student_user_id = ?',
     [String(resumeRows[0].primary_resume_id), String(studentId)]
@@ -1172,7 +1130,6 @@ const applyToInternship = catchAsync(async (req, res) => {
   }
   const resume = resumeInfo[0];
 
-  // Check internship is active
   const [internRows] = await pool.execute(
     `SELECT i.internship_id, i.title, i.employer_user_id, i.status, i.deadline,
             u.is_active AS employer_active
@@ -1199,7 +1156,6 @@ const applyToInternship = catchAsync(async (req, res) => {
   // Compute match score
   const matchScore = await computeMatchScore(studentId, internshipId);
 
-  // Insert application
   let applicationId;
   try {
     const [result] = await pool.execute(
@@ -1225,7 +1181,6 @@ const applyToInternship = catchAsync(async (req, res) => {
     throw err;
   }
 
-  // Insert initial status history
   await pool.execute(
     `INSERT INTO application_status_history
       (application_id, old_status, new_status, changed_by_user_id)
@@ -1233,7 +1188,6 @@ const applyToInternship = catchAsync(async (req, res) => {
     [String(applicationId), String(studentId)]
   );
 
-  // Create notification for employer
   await pool.execute(
     `INSERT INTO notification
       (user_id, type, title, message, reference_id, reference_type)
@@ -1242,17 +1196,16 @@ const applyToInternship = catchAsync(async (req, res) => {
       String(internship.employer_user_id),
       `New application for "${internship.title}"`,
       `A student has applied to your internship "${internship.title}".`,
-      String(applicationId),
+      String(internshipId),
     ]
   );
 
-  // Push real-time notification via Socket.IO if available
   const io = req.app.get('io');
   if (io) {
     io.to(`user:${internship.employer_user_id}`).emit('notification:new', {
       type: 'new_application',
       title: `New application for "${internship.title}"`,
-      referenceId: applicationId,
+      referenceId: internshipId,
       referenceType: 'application',
     });
   }
@@ -1267,10 +1220,6 @@ const applyToInternship = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * PUT /api/student/applications/:id/withdraw
- * Withdraw an application.
- */
 const withdrawApplication = catchAsync(async (req, res) => {
   const studentId = req.user.userId;
   const { id } = req.params;
@@ -1305,52 +1254,6 @@ const withdrawApplication = catchAsync(async (req, res) => {
   res.json({ success: true, message: 'Application withdrawn' });
 });
 
-/**
- * Compute match score for a student applying to an internship.
- * Uses the formula: (Skill × 0.80) + (Profile × 0.20) — missing embedding fallback.
- */
-async function computeMatchScore(studentUserId, internshipId) {
-  const { computeSkillScore, computeProfileBonus } = require('./internshipController');
-
-  const [skills] = await pool.execute(
-    `SELECT rs.skill_id, rs.required_level, rs.is_mandatory
-     FROM requires_skill rs WHERE rs.internship_id = ?`,
-    [String(internshipId)]
-  );
-
-  if (skills.length === 0) return null;
-
-  const [studentSkills] = await pool.execute(
-    'SELECT skill_id, proficiency_level FROM has_skill WHERE student_user_id = ?',
-    [String(studentUserId)]
-  );
-
-  const studentMap = {};
-  for (const s of studentSkills) {
-    studentMap[s.skill_id] = s.proficiency_level;
-  }
-
-  const formattedSkills = skills.map((s) => ({
-    skillId: s.skill_id,
-    requiredLevel: s.required_level,
-    isMandatory: !!s.is_mandatory,
-  }));
-
-  const skillScore = computeSkillScore(formattedSkills, studentMap);
-  const profileBonus = await computeProfileBonus(studentUserId);
-  const semanticScore = await embeddingService.computeSemanticScore(studentUserId, internshipId);
-
-  if (semanticScore !== null) {
-    return skillScore * 0.65 + semanticScore * 0.20 + profileBonus * 100 * 0.15;
-  }
-  return skillScore * 0.80 + profileBonus * 100 * 0.20;
-}
-
-// ── Bookmarks ──────────────────────────────────────────────────────────────────
-
-/**
- * GET /api/student/bookmarks
- */
 const getBookmarks = catchAsync(async (req, res) => {
   const studentId = req.user.userId;
   const { page = 1, limit = 20 } = req.query;
@@ -1399,9 +1302,6 @@ const getBookmarks = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * POST /api/student/bookmarks/:internshipId
- */
 const addBookmark = catchAsync(async (req, res) => {
   const studentId = req.user.userId;
   const { internshipId } = req.params;
@@ -1421,9 +1321,6 @@ const addBookmark = catchAsync(async (req, res) => {
   res.status(201).json({ success: true, message: 'Bookmarked' });
 });
 
-/**
- * DELETE /api/student/bookmarks/:internshipId
- */
 const removeBookmark = catchAsync(async (req, res) => {
   const studentId = req.user.userId;
   const { internshipId } = req.params;
@@ -1436,7 +1333,6 @@ const removeBookmark = catchAsync(async (req, res) => {
   res.json({ success: true, message: 'Bookmark removed' });
 });
 
-// ── GET /api/student/recommendations ─────────────────────────────────────────────
 const getRecommendations = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { page = 1, limit = 20, minScore = 0, scope = 'industry' } = req.query;
@@ -1519,7 +1415,6 @@ const getRecommendations = catchAsync(async (req, res) => {
     intern.skills = skillMap[intern.internship_id] || [];
   }
 
-  // Get student skills
   const [studentSkills] = await pool.execute(
     `SELECT hs.skill_id, s.display_name, s.normalized_name, hs.proficiency_level
      FROM has_skill hs

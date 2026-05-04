@@ -16,7 +16,6 @@ import {
 import { useTheme } from '../../contexts/ThemeContext';
 import API from '../../api/axios';
 
-// ─── Password requirement row ─────────────────────────────────────────────────
 function Requirement({ met, label }) {
   return (
     <li className={`flex items-center gap-2.5 text-xs transition-colors duration-200 ${met ? 'text-accent-600 dark:text-accent-400' : 'text-surface-400 dark:text-surface-500'}`}>
@@ -34,7 +33,6 @@ function Requirement({ met, label }) {
   );
 }
 
-// ─── Password strength bar ────────────────────────────────────────────────────
 function StrengthBar({ password }) {
   const checks = [
     password.length >= 8,
@@ -75,7 +73,6 @@ function StrengthBar({ password }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ResetPasswordPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

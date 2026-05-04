@@ -10,8 +10,6 @@ import {
   Building2,
   Briefcase,
   Loader2,
-  Smile,
-  Paperclip,
   Sparkles,
   Info,
   ExternalLink,
@@ -259,6 +257,11 @@ export default function StudentMessages() {
   useEffect(() => {
     if (!socket) return;
     function handleNewMessage(msg) {
+      // Skip echoes of our own messages — the optimistic update + API
+      // response already handle the sender's view, so accepting the socket
+      // copy too would race and double-render.
+      if (msg.senderUserId === currentUserId) return;
+
       if (msg.conversationId === activeConvId) {
         setMessages((prev) => prev.some((m) => m.messageId === msg.messageId) ? prev : [...prev, msg]);
         messagesAPI.markAsRead(msg.conversationId).catch(() => {});
@@ -281,7 +284,7 @@ export default function StudentMessages() {
       socket.off('message:receive', handleNewMessage);
       socket.off('message:read', handleReadReceipt);
     };
-  }, [socket, activeConvId]);
+  }, [socket, activeConvId, currentUserId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -465,13 +468,7 @@ export default function StudentMessages() {
 
                 {/* Input */}
                 <div className="px-4 py-3 border-t border-surface-100 dark:border-surface-800 bg-white dark:bg-dark-card">
-                  <div className="flex items-end gap-2 bg-surface-50 dark:bg-surface-800 rounded-2xl px-2 py-1.5 border border-surface-200 dark:border-surface-700 focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-500/20 transition-all">
-                    <button
-                      type="button"
-                      className="w-9 h-9 rounded-xl text-surface-400 hover:text-primary-600 flex items-center justify-center cursor-pointer shrink-0"
-                    >
-                      <Paperclip size={16} />
-                    </button>
+                  <div className="flex items-end gap-2 bg-surface-50 dark:bg-surface-800 rounded-2xl px-3 py-1.5 border border-surface-200 dark:border-surface-700 focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-500/20 transition-all">
                     <textarea
                       ref={inputRef}
                       value={inputText}
@@ -485,12 +482,6 @@ export default function StudentMessages() {
                         e.target.style.height = Math.min(e.target.scrollHeight, 112) + 'px';
                       }}
                     />
-                    <button
-                      type="button"
-                      className="w-9 h-9 rounded-xl text-surface-400 hover:text-primary-600 flex items-center justify-center cursor-pointer shrink-0"
-                    >
-                      <Smile size={16} />
-                    </button>
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.92 }}

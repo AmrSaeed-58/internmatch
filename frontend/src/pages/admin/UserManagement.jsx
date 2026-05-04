@@ -27,10 +27,8 @@ import DashboardLayout from '../../components/DashboardLayout';
 import EmptyState from '../../components/EmptyState';
 import * as adminAPI from '../../api/admin';
 
-// ── constants ─────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 20;
 
-// ── helpers ───────────────────────────────────────────────────────────────────
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', {
     month: 'short',
@@ -58,7 +56,6 @@ function RoleBadge({ role }) {
   );
 }
 
-// ── modals ────────────────────────────────────────────────────────────────────
 function ModalShell({ title, onClose, children, footer }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-surface-900/60 dark:bg-surface-950/70 backdrop-blur-sm">
@@ -177,7 +174,6 @@ function DeleteModal({ user, onClose, onConfirm }) {
   );
 }
 
-// ── main ──────────────────────────────────────────────────────────────────────
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);

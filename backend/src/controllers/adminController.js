@@ -8,7 +8,6 @@ const catchAsync = require('../utils/catchAsync');
 const BCRYPT_SALT_ROUNDS = 12;
 const uploadDir = process.env.UPLOAD_DIR || './uploads';
 
-// ── Allowed action types for system_log (VARCHAR validated by backend) ─────────
 const VALID_LOG_ACTIONS = [
   'user_registered', 'user_login', 'user_logout', 'user_updated', 'user_deactivated',
   'user_activated', 'user_deleted', 'password_changed', 'internship_created',
@@ -22,7 +21,6 @@ const VALID_REPORT_TYPES = [
   'employer_performance', 'system_audit',
 ];
 
-// ── Dashboard Stats ──────────────────────────────────────────────────────────────
 const getDashboardStats = catchAsync(async (req, res) => {
   const conn = await pool.getConnection();
   try {
@@ -86,7 +84,6 @@ const getDashboardStats = catchAsync(async (req, res) => {
   }
 });
 
-// ── User Management ──────────────────────────────────────────────────────────────
 const getUsers = catchAsync(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
@@ -184,7 +181,6 @@ const updateUser = catchAsync(async (req, res) => {
     params.push(fullName);
   }
   if (email) {
-    // Check email uniqueness
     const [[dup]] = await pool.query(
       'SELECT user_id FROM users WHERE email = ? AND user_id != ?', [email, id]
     );
@@ -307,7 +303,6 @@ const deleteUser = catchAsync(async (req, res) => {
   res.json({ success: true, message: 'User deleted permanently' });
 });
 
-// ── Internship Management ────────────────────────────────────────────────────────
 const getInternships = catchAsync(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
@@ -468,7 +463,6 @@ const deleteInternship = catchAsync(async (req, res) => {
   res.json({ success: true, message: 'Internship deleted' });
 });
 
-// ── System Logs ──────────────────────────────────────────────────────────────────
 const getLogs = catchAsync(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
@@ -565,7 +559,6 @@ const exportLogs = catchAsync(async (req, res) => {
   res.send(header + rows);
 });
 
-// ── Reports ──────────────────────────────────────────────────────────────────────
 const generateReport = catchAsync(async (req, res) => {
   const { reportType, startDate, endDate, filters } = req.body;
 
@@ -595,7 +588,7 @@ const generateReport = catchAsync(async (req, res) => {
     let where = '1=1';
     const params = [];
     if (dateFilter) {
-      where += ' AND a.created_at BETWEEN ? AND ?';
+      where += ' AND a.applied_date BETWEEN ? AND ?';
       params.push(startDate, endDate + ' 23:59:59');
     }
     const [rows] = await pool.query(
@@ -667,7 +660,6 @@ const generateReport = catchAsync(async (req, res) => {
     data = rows;
   }
 
-  // Insert audit log row
   await pool.query(
     `INSERT INTO report (admin_user_id, report_type, report_description, filters_json)
      VALUES (?, ?, ?, ?)`,
@@ -735,7 +727,6 @@ const exportReport = catchAsync(async (req, res) => {
   res.send(headers + rows);
 });
 
-// ── Notifications ────────────────────────────────────────────────────────────────
 const getNotifications = catchAsync(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
@@ -765,7 +756,16 @@ const getNotifications = catchAsync(async (req, res) => {
 
   res.json({
     success: true,
-    data: notifications,
+    data: notifications.map((n) => ({
+      notificationId: n.notification_id,
+      type: n.type,
+      title: n.title,
+      message: n.message,
+      referenceId: n.reference_id,
+      referenceType: n.reference_type,
+      isRead: !!n.is_read,
+      createdAt: n.created_at,
+    })),
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 });
@@ -788,7 +788,6 @@ const markAllNotificationsRead = catchAsync(async (req, res) => {
   res.json({ success: true, message: 'All notifications marked as read' });
 });
 
-// ── Change Password ──────────────────────────────────────────────────────────────
 const changePassword = catchAsync(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
 

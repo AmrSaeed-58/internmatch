@@ -5,7 +5,6 @@ const pool = require('../config/db');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 const EMBEDDING_MODEL = process.env.GEMINI_EMBEDDING_MODEL || 'text-embedding-004';
 
-// ── Generate embedding via Gemini ────────────────────────────────────────────
 async function generateEmbedding(text) {
   if (!process.env.GEMINI_API_KEY) return null;
   try {
@@ -18,7 +17,6 @@ async function generateEmbedding(text) {
   }
 }
 
-// ── Cosine similarity ────────────────────────────────────────────────────────
 function cosineSimilarity(a, b) {
   if (!a || !b || a.length !== b.length) return 0;
   let dot = 0, magA = 0, magB = 0;
@@ -31,7 +29,6 @@ function cosineSimilarity(a, b) {
   return denom === 0 ? 0 : dot / denom;
 }
 
-// ── Build source text for a student ──────────────────────────────────────────
 async function buildStudentText(studentUserId) {
   const [rows] = await pool.execute(
     `SELECT s.bio, s.university, s.major, s.graduation_year, s.gpa,
@@ -65,7 +62,6 @@ async function buildStudentText(studentUserId) {
   return parts.filter(Boolean).join('. ');
 }
 
-// ── Build source text for an internship ──────────────────────────────────────
 async function buildInternshipText(internshipId) {
   const [rows] = await pool.execute(
     `SELECT i.title, i.description, i.location, i.work_type,
@@ -98,12 +94,10 @@ async function buildInternshipText(internshipId) {
   return parts.filter(Boolean).join('. ');
 }
 
-// ── Hash text for change detection ───────────────────────────────────────────
 function hashText(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
 
-// ── Generate and store student embedding (fire-and-forget safe) ──────────────
 async function updateStudentEmbedding(studentUserId) {
   try {
     const text = await buildStudentText(studentUserId);
@@ -133,7 +127,6 @@ async function updateStudentEmbedding(studentUserId) {
   }
 }
 
-// ── Generate and store internship embedding ──────────────────────────────────
 async function updateInternshipEmbedding(internshipId) {
   try {
     const text = await buildInternshipText(internshipId);
@@ -162,7 +155,6 @@ async function updateInternshipEmbedding(internshipId) {
   }
 }
 
-// ── Get stored embedding ─────────────────────────────────────────────────────
 async function getStudentEmbedding(studentUserId) {
   const [rows] = await pool.execute(
     'SELECT embedding FROM student_embedding WHERE student_user_id = ?',
@@ -183,7 +175,6 @@ async function getInternshipEmbedding(internshipId) {
   return parsed;
 }
 
-// ── Compute semantic score between student and internship ─────────────────────
 async function computeSemanticScore(studentUserId, internshipId) {
   const [studentEmb, internshipEmb] = await Promise.all([
     getStudentEmbedding(studentUserId),

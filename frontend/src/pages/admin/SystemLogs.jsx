@@ -19,7 +19,6 @@ import DashboardLayout from '../../components/DashboardLayout';
 import EmptyState from '../../components/EmptyState';
 import * as adminAPI from '../../api/admin';
 
-// ── constants ─────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 50;
 
 const ACTION_TYPES = [
@@ -35,7 +34,6 @@ const ACTION_TYPES = [
   'password_changed',
 ];
 
-// ── helpers ───────────────────────────────────────────────────────────────────
 function formatTimestamp(iso) {
   return new Date(iso).toLocaleString('en-US', {
     month: 'short',
@@ -93,7 +91,6 @@ function mapLog(l) {
   };
 }
 
-// ── main ──────────────────────────────────────────────────────────────────────
 export default function SystemLogs() {
   const [logs, setLogs]               = useState([]);
   const [total, setTotal]             = useState(0);

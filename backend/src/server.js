@@ -34,6 +34,9 @@ app.set('io', io);
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:3000',
   credentials: true,
+  // Expose Content-Disposition so the frontend can read the original
+  // filename/extension when downloading resumes, CSV reports, etc.
+  exposedHeaders: ['Content-Disposition'],
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -131,7 +134,6 @@ io.on('connection', (socket) => {
       const { student_user_id, employer_user_id } = conv[0];
       if (student_user_id !== socket.userId && employer_user_id !== socket.userId) return;
 
-      // Check other party is active
       const otherUserId = student_user_id === socket.userId ? employer_user_id : student_user_id;
       const [otherUser] = await pool.execute(
         'SELECT is_active FROM users WHERE user_id = ?',

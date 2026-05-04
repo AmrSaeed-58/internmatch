@@ -36,6 +36,8 @@ export const deleteInternship = (id) => API.delete(`/employer/internships/${id}`
 // Applicants
 export const getApplicants = (internshipId, params) =>
   API.get(`/employer/internships/${internshipId}/applicants`, { params });
+export const getApplicantProfile = (studentId) =>
+  API.get(`/employer/applicants/${studentId}/profile`);
 export const updateApplicationStatus = (applicationId, data) =>
   API.put(`/employer/applications/${applicationId}/status`, data);
 export const downloadResume = (applicationId) =>

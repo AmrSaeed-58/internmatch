@@ -3,10 +3,6 @@ const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 const { createNotification } = require('../utils/notificationService');
 
-/**
- * GET /api/messages/conversations
- * List all conversations for the current user.
- */
 const getConversations = catchAsync(async (req, res) => {
   const { userId, role } = req.user;
   const { page = 1, limit = 20 } = req.query;
@@ -17,7 +13,6 @@ const getConversations = catchAsync(async (req, res) => {
   const participantCol = role === 'student' ? 'student_user_id' : 'employer_user_id';
   const otherCol = role === 'student' ? 'employer_user_id' : 'student_user_id';
 
-  // Count
   const [countRows] = await pool.execute(
     `SELECT COUNT(*) AS total FROM conversation WHERE ${participantCol} = ?`,
     [String(userId)]
@@ -74,10 +69,6 @@ const getConversations = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * POST /api/messages/conversations
- * Create or get existing conversation.
- */
 const createConversation = catchAsync(async (req, res) => {
   const { userId, role } = req.user;
   const { otherUserId, internshipId } = req.body;
@@ -130,7 +121,6 @@ const createConversation = catchAsync(async (req, res) => {
     }
   }
 
-  // Check if conversation already exists
   const [existing] = await pool.execute(
     `SELECT conversation_id FROM conversation
      WHERE student_user_id = ? AND employer_user_id = ? AND context_type = ? AND context_key = ?`,
@@ -157,10 +147,6 @@ const createConversation = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * GET /api/messages/conversations/:id/messages
- * Get messages in a conversation.
- */
 const getMessages = catchAsync(async (req, res) => {
   const { id } = req.params;
   const { userId } = req.user;
@@ -183,7 +169,6 @@ const getMessages = catchAsync(async (req, res) => {
     throw new AppError('You are not a participant in this conversation', 403);
   }
 
-  // Count
   const [countRows] = await pool.execute(
     'SELECT COUNT(*) AS total FROM message WHERE conversation_id = ?',
     [String(id)]
@@ -218,10 +203,6 @@ const getMessages = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * POST /api/messages/conversations/:id/messages
- * Send a message.
- */
 const sendMessage = catchAsync(async (req, res) => {
   const { id } = req.params;
   const { userId } = req.user;
@@ -251,7 +232,6 @@ const sendMessage = catchAsync(async (req, res) => {
     throw new AppError('You are not a participant in this conversation', 403);
   }
 
-  // Check if the other party is active
   const otherUserId = student_user_id === userId ? employer_user_id : student_user_id;
   const [otherUser] = await pool.execute(
     'SELECT is_active FROM users WHERE user_id = ?',
@@ -262,7 +242,6 @@ const sendMessage = catchAsync(async (req, res) => {
     throw new AppError("Cannot send messages — this user's account is currently unavailable", 400);
   }
 
-  // Insert message
   const [result] = await pool.execute(
     'INSERT INTO message (conversation_id, sender_user_id, content) VALUES (?, ?, ?)',
     [String(id), String(userId), content.trim()]
@@ -299,10 +278,6 @@ const sendMessage = catchAsync(async (req, res) => {
   res.status(201).json({ success: true, data: messageData });
 });
 
-/**
- * PUT /api/messages/conversations/:id/read
- * Mark all messages in conversation as read.
- */
 const markAsRead = catchAsync(async (req, res) => {
   const { id } = req.params;
   const { userId } = req.user;

@@ -30,7 +30,6 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 
-// ---- Animated Particles Background ----
 function ParticlesField({ count = 40 }) {
   const particles = useMemo(() =>
     Array.from({ length: count }, (_, i) => ({
@@ -68,7 +67,6 @@ function ParticlesField({ count = 40 }) {
   );
 }
 
-// ---- Morphing Blob ----
 function MorphBlob({ className, color, size = 400, delay = 0 }) {
   return (
     <motion.div
@@ -85,7 +83,6 @@ function MorphBlob({ className, color, size = 400, delay = 0 }) {
   );
 }
 
-// ---- Animated Counter ----
 function AnimatedCounter({ value, suffix = '' }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true });
@@ -117,7 +114,6 @@ function AnimatedCounter({ value, suffix = '' }) {
   );
 }
 
-// ---- Top Bar ----
 function TopBar() {
   const { theme, toggleTheme } = useTheme();
   const [scrolled, setScrolled] = useState(false);
@@ -226,7 +222,6 @@ function TopBar() {
   );
 }
 
-// ---- Hero ----
 function HeroSection() {
   const { scrollY } = useScroll();
   const y = useTransform(scrollY, [0, 500], [0, 150]);
@@ -306,7 +301,7 @@ function HeroSection() {
               transition={{ duration: 0.7, delay: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
               className="font-body text-base sm:text-lg text-surface-600 dark:text-surface-300 leading-relaxed max-w-xl mb-7"
             >
-              InternMatch uses hybrid AI to analyze your skills, resume, and profile — connecting you with internships where you'll truly thrive.
+              InternMatch reads your resume and profile and matches you with internships that actually fit, instead of dumping a thousand listings on you.
             </motion.p>
 
             {/* CTA buttons */}
@@ -424,7 +419,6 @@ function HeroSection() {
   );
 }
 
-// ---- Features Section ----
 function FeaturesSection() {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-80px' });
@@ -432,7 +426,7 @@ function FeaturesSection() {
   const features = [
     {
       icon: Upload, title: 'Upload Your Resume',
-      description: 'Our AI extracts your skills automatically. Review and confirm — you stay in control of your profile.',
+      description: 'We extract your skills from your resume. You review the list and edit anything you want before saving it.',
       gradient: 'from-primary-500 to-primary-600', bg: 'bg-primary-50 dark:bg-primary-950/30',
       image: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?auto=format&fit=crop&w=800&q=80',
     },
@@ -523,7 +517,6 @@ function FeaturesSection() {
   );
 }
 
-// ---- Why InternMatch Section ----
 function WhySection() {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-80px' });
@@ -533,7 +526,7 @@ function WhySection() {
     { icon: Shield, title: 'Privacy First', desc: 'Your data stays yours. Always secure.' },
     { icon: Heart, title: 'Human-Centered', desc: 'AI assists, you decide your path.' },
     { icon: BarChart3, title: 'Data-Driven', desc: 'Real scores, real analysis, real results.' },
-    { icon: Globe, title: 'All Industries', desc: 'Tech to healthcare — we have it covered.' },
+    { icon: Globe, title: 'All Industries', desc: 'From tech to healthcare and everything in between.' },
     { icon: GraduationCap, title: 'Student-First', desc: 'Built specifically for your journey.' },
   ];
 
@@ -551,7 +544,7 @@ function WhySection() {
               Not just another <span className="text-gradient-warm">job board</span>
             </h2>
             <p className="text-sm sm:text-base text-surface-500 dark:text-surface-400 leading-relaxed mb-8">
-              Traditional job boards throw thousands of listings at you. InternMatch is different — we understand what makes you unique and find where you belong.
+              Most job boards make you sift through thousands of listings. We rank what's actually relevant to your skills and degree, so the top of the page is the part worth reading.
             </p>
 
             {/* Image */}
@@ -599,7 +592,6 @@ function WhySection() {
   );
 }
 
-// ---- Testimonials Section ----
 function TestimonialsSection() {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-80px' });
@@ -617,7 +609,7 @@ function TestimonialsSection() {
       name: 'Ahmad Hassan',
       role: 'Business Administration',
       university: 'PSUT',
-      quote: 'The semantic search is incredible — I described what I wanted in plain language and got exactly the right internships.',
+      quote: "I typed what I was looking for in plain English and the right internships came up. That alone saved me hours.",
       avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
       rating: 5,
     },
@@ -690,7 +682,6 @@ function TestimonialsSection() {
   );
 }
 
-// ---- For Employers Section ----
 function EmployersSection() {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-80px' });
@@ -805,7 +796,6 @@ function EmployersSection() {
   );
 }
 
-// ---- CTA Section ----
 function CTASection() {
   return (
     <section className="relative py-20 lg:py-24 overflow-hidden">
@@ -851,7 +841,6 @@ function CTASection() {
   );
 }
 
-// ---- Footer ----
 function Footer() {
   const footerLinks = {
     'For Students': [
@@ -892,15 +881,29 @@ function Footer() {
               AI-powered internship matching platform connecting students with their dream opportunities. Built with advanced matching algorithms to find where you truly belong.
             </p>
             <div className="flex items-center gap-4 text-surface-400">
-              <button type="button" aria-label="Email" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">
+              <a
+                href="mailto:internmatch@psut.edu.jo"
+                aria-label="Email InternMatch"
+                className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200"
+              >
                 <Mail size={22} />
-              </button>
-              <button type="button" aria-label="Website" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">
+              </a>
+              <a
+                href="https://www.psut.edu.jo"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="PSUT website"
+                className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200"
+              >
                 <Globe size={22} />
-              </button>
-              <button type="button" aria-label="Blog" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200">
+              </a>
+              <a
+                href="#features"
+                aria-label="Learn more"
+                className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-200"
+              >
                 <BookOpen size={22} />
-              </button>
+              </a>
             </div>
           </div>
 
@@ -940,7 +943,6 @@ function Footer() {
   );
 }
 
-// ---- Page ----
 export default function LandingPage() {
   return (
     <div className="bg-surface-50 dark:bg-dark-bg font-body">

@@ -66,8 +66,8 @@ function getNotificationLink(notification) {
       // Employers manage their own internships — keep them inside the employer
       // dashboard rather than dropping them onto the public student-facing page.
       return '/employer/internships';
-    case 'message':
-      return '/employer/messages';
+    case 'conversation':
+      return referenceId ? `/employer/messages?conversation=${referenceId}` : '/employer/messages';
     default:
       return null;
   }
@@ -88,7 +88,7 @@ export default function EmployerNotifications() {
         const res = await employerAPI.getNotifications({
           page: currentPage,
           limit: 20,
-          unreadOnly: showUnreadOnly || undefined,
+          unread: showUnreadOnly ? 'true' : undefined,
         });
         setNotifications(res.data.data || []);
         setPagination(res.data.pagination || { total: 0, totalPages: 1 });

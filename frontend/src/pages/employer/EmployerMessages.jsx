@@ -105,6 +105,11 @@ export default function EmployerMessages() {
     if (!socket) return;
 
     function handleNewMessage(msg) {
+      // Skip echoes of our own messages — the optimistic update + API
+      // response already handle the sender's view, so accepting the socket
+      // copy too would race and double-render.
+      if (msg.senderUserId === user?.userId) return;
+
       if (msg.conversationId === activeId) {
         setMessages((prev) => {
           if (prev.some((m) => m.messageId === msg.messageId)) return prev;
@@ -143,7 +148,7 @@ export default function EmployerMessages() {
       socket.off('message:receive', handleNewMessage);
       socket.off('message:read', handleReadReceipt);
     };
-  }, [socket, activeId]);
+  }, [socket, activeId, user?.userId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });

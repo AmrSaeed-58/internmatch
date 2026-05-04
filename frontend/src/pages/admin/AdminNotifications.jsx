@@ -50,7 +50,6 @@ const TYPE_GRADIENT_MAP = {
   user_deactivated: 'from-red-500 to-red-600',
 };
 
-// ── relative time helper ────────────────────────────────────────────────────────
 function timeAgo(dateStr) {
   const now = new Date();
   const date = new Date(dateStr);
@@ -68,7 +67,6 @@ function timeAgo(dateStr) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-// ── navigation target helper ────────────────────────────────────────────────────
 function getNotificationLink(notification) {
   const { referenceType } = notification;
   switch (referenceType) {
@@ -78,28 +76,14 @@ function getNotificationLink(notification) {
       return '/admin/internships';
     case 'user':
       return '/admin/users';
-    case 'message':
+    case 'conversation':
+      // Admin role doesn't participate in conversations.
       return null;
     default:
       return null;
   }
 }
 
-// ── map snake_case API response to camelCase ────────────────────────────────────
-function mapNotification(n) {
-  return {
-    notificationId: n.notification_id,
-    type: n.type,
-    title: n.title,
-    message: n.message,
-    referenceId: n.reference_id,
-    referenceType: n.reference_type,
-    isRead: n.is_read,
-    createdAt: n.created_at,
-  };
-}
-
-// ── pagination ──────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 20;
 
 export default function AdminNotifications() {
@@ -117,10 +101,10 @@ export default function AdminNotifications() {
       const params = { page: currentPage, limit: PAGE_SIZE };
       if (showUnreadOnly) params.unreadOnly = true;
       const res = await adminAPI.getNotifications(params);
-      const mapped = (res.data.data || []).map(mapNotification);
-      setNotifications(mapped);
+      const items = res.data.data || [];
+      setNotifications(items);
       setTotalPages(res.data.pagination?.totalPages || 1);
-      setUnreadCount(mapped.filter((n) => !n.isRead).length);
+      setUnreadCount(items.filter((n) => !n.isRead).length);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to load notifications');
     } finally {

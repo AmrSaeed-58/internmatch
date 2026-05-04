@@ -39,7 +39,6 @@ export default function AICandidates() {
   const [loading, setLoading] = useState(true);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
 
-  // Fetch employer internships
   useEffect(() => {
     async function fetchInternships() {
       try {
@@ -58,7 +57,6 @@ export default function AICandidates() {
     fetchInternships();
   }, []);
 
-  // Fetch candidates when internship changes
   useEffect(() => {
     if (!selectedInternship) return;
     async function fetchCandidates() {
@@ -66,8 +64,8 @@ export default function AICandidates() {
       try {
         const res = await employerAPI.getCandidates(selectedInternship, { limit: 50 });
         setCandidates(res.data.data || []);
-        // Track already-invited
-        const invited = (res.data.data || []).filter((c) => c.invited).map((c) => c.studentUserId);
+        // Track already-invited (backend returns `isInvited`)
+        const invited = (res.data.data || []).filter((c) => c.isInvited).map((c) => c.studentUserId);
         setInvitedIds(invited);
       } catch (err) {
         toast.error(err.response?.data?.message || 'Failed to load candidates');
@@ -216,11 +214,9 @@ export default function AICandidates() {
                   return (
                     <motion.div
                       key={candidate.studentUserId}
-                      
-                      
-                      className="group bg-white dark:bg-dark-card rounded-xl border border-surface-200 dark:border-surface-800 hover:shadow-card-hover transition-shadow duration-200"
+                      className="group h-full bg-white dark:bg-dark-card rounded-xl border border-surface-200 dark:border-surface-800 hover:shadow-card-hover transition-shadow duration-200"
                     >
-                      <div className="relative p-5 flex flex-col">
+                      <div className="relative p-5 flex flex-col h-full">
                         <div className="flex items-start justify-between mb-4">
                           <div className="w-12 h-12 rounded-xl bg-primary-600 flex items-center justify-center text-white text-lg font-bold shadow-lg">
                             {(candidate.fullName || candidate.studentName || '?').charAt(0)}
@@ -260,21 +256,27 @@ export default function AICandidates() {
                             </div>
                           )}
 
-                          {candidate.topSkills && candidate.topSkills.length > 0 && (
+                          {candidate.skills && candidate.skills.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-3">
-                              {candidate.topSkills.slice(0, 5).map((skill, i) => (
+                              {candidate.skills.slice(0, 4).map((skill, i) => (
                                 <span
                                   key={i}
-                                  className="px-2 py-0.5 rounded-full bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-400 text-[10px] font-medium border border-surface-200 dark:border-surface-700"
+                                  className="px-2 py-0.5 rounded-full bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-400 text-[10px] font-medium border border-surface-200 dark:border-surface-700 max-w-[120px] truncate"
+                                  title={typeof skill === 'string' ? skill : skill.displayName}
                                 >
                                   {typeof skill === 'string' ? skill : skill.displayName}
                                 </span>
                               ))}
+                              {candidate.skills.length > 4 && (
+                                <span className="px-2 py-0.5 rounded-full bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 text-[10px] font-semibold border border-primary-100 dark:border-primary-800/30">
+                                  +{candidate.skills.length - 4}
+                                </span>
+                              )}
                             </div>
                           )}
                         </div>
 
-                        <div className="mt-4 pt-3 border-t border-surface-100 dark:border-surface-700">
+                        <div className="mt-4 pt-3 border-t border-surface-100 dark:border-surface-700 shrink-0">
                           {isInvited ? (
                             <div className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl bg-accent-50 dark:bg-accent-900/20 text-accent-700 dark:text-accent-400 text-xs font-semibold border border-accent-200 dark:border-accent-800/30">
                               <CheckCircle2 size={13} />

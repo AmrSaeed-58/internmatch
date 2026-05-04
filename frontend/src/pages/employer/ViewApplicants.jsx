@@ -14,24 +14,17 @@ import {
   Calendar,
   Star,
   Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';
 import StatusBadge from '../../components/StatusBadge';
 import MatchScoreBadge from '../../components/MatchScoreBadge';
 import EmptyState from '../../components/EmptyState';
+import StatusChangeModal, { STATUS_TRANSITIONS } from '../../components/StatusChangeModal';
 import * as employerAPI from '../../api/employer';
 import * as messagesAPI from '../../api/messages';
-
-const STATUS_TRANSITIONS = {
-  pending: ['reviewing', 'rejected'],
-  reviewing: ['shortlisted', 'rejected'],
-  shortlisted: ['interview_scheduled', 'rejected'],
-  interview_scheduled: ['accepted', 'rejected'],
-  accepted: [],
-  rejected: [],
-  withdrawn: [],
-};
+import { downloadBlobFromResponse } from '../../utils/downloadFile';
 
 const SORT_OPTIONS = [
   { value: 'matchScore', label: 'Match Score' },
@@ -40,7 +33,7 @@ const SORT_OPTIONS = [
   { value: 'status', label: 'Status' },
 ];
 
-const STATUS_FILTERS = ['all', 'pending', 'reviewing', 'shortlisted', 'interview_scheduled', 'accepted', 'rejected'];
+const STATUS_FILTERS = ['all', 'pending', 'under_review', 'interview_scheduled', 'accepted', 'rejected'];
 
 function GraduationBadge({ status }) {
   const isGraduated = status === 'graduated';
@@ -83,6 +76,7 @@ export default function ViewApplicants() {
   const [openDropdown, setOpenDropdown] = useState(null);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
+  const [statusTarget, setStatusTarget] = useState(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -90,7 +84,7 @@ export default function ViewApplicants() {
       try {
         const [internshipRes, applicantsRes] = await Promise.all([
           employerAPI.getInternship(id),
-          employerAPI.getApplicants(id, { page, limit: 20, status: statusFilter !== 'all' ? statusFilter : undefined, sortBy }),
+          employerAPI.getApplicants(id, { page, limit: 20, status: statusFilter !== 'all' ? statusFilter : undefined, sort: sortBy }),
         ]);
         setInternshipTitle(internshipRes.data.data.title);
         setApplicants(applicantsRes.data.data || []);
@@ -104,30 +98,25 @@ export default function ViewApplicants() {
     fetchData();
   }, [id, page, statusFilter, sortBy]);
 
-  async function changeStatus(applicationId, newStatus) {
+  async function submitStatusChange({ status, note }) {
+    if (!statusTarget) return;
+    const applicationId = statusTarget.applicationId;
     try {
-      await employerAPI.updateApplicationStatus(applicationId, { status: newStatus });
+      await employerAPI.updateApplicationStatus(applicationId, { status, note });
       setApplicants((prev) =>
-        prev.map((a) => (a.applicationId === applicationId ? { ...a, status: newStatus } : a))
+        prev.map((a) => (a.applicationId === applicationId ? { ...a, status } : a))
       );
-      toast.success(`Status updated to ${newStatus.replace(/_/g, ' ')}`);
+      toast.success(`Status updated to ${status.replace(/_/g, ' ')}`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to update status');
+      throw err;
     }
-    setOpenDropdown(null);
   }
 
   async function handleDownloadResume(applicationId) {
     try {
       const res = await employerAPI.downloadResume(applicationId);
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `resume-${applicationId}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      downloadBlobFromResponse(res, `resume-${applicationId}`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to download resume');
     }
@@ -222,7 +211,7 @@ export default function ViewApplicants() {
               return (
                 <motion.div
                   key={applicant.applicationId}
-                  className="group relative rounded-xl overflow-hidden bg-white dark:bg-dark-card border border-surface-200 dark:border-surface-700 shadow-card"
+                  className="group relative rounded-xl bg-white dark:bg-dark-card border border-surface-200 dark:border-surface-700 shadow-card"
                 >
                   <div className="relative p-4 md:p-5">
                     <div className="flex flex-col sm:flex-row sm:items-start gap-4">
@@ -256,12 +245,12 @@ export default function ViewApplicants() {
                             )}
                             <span className="inline-flex items-center gap-1">
                               <Calendar size={10} />
-                              {new Date(applicant.appliedAt || applicant.createdAt).toLocaleDateString()}
+                              {new Date(applicant.appliedDate).toLocaleDateString()}
                             </span>
                           </div>
-                          {applicant.topSkills && applicant.topSkills.length > 0 && (
+                          {applicant.skills && applicant.skills.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-2">
-                              {applicant.topSkills.slice(0, 5).map((skill, i) => (
+                              {applicant.skills.slice(0, 5).map((skill, i) => (
                                 <span key={i} className="px-2 py-0.5 rounded-full bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-400 text-[10px] font-bold border border-surface-200 dark:border-surface-700">
                                   {typeof skill === 'string' ? skill : skill.displayName}
                                 </span>
@@ -271,15 +260,34 @@ export default function ViewApplicants() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 sm:shrink-0">
+                      <div className="flex items-center gap-2 sm:shrink-0 flex-wrap">
                         {applicant.matchScore != null && (
                           <MatchScoreBadge score={Math.round(Number(applicant.matchScore))} variant="compact" />
+                        )}
+
+                        <Link
+                          to={`/employer/student/${applicant.studentUserId}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 shadow-sm"
+                        >
+                          <User size={13} />
+                          View Profile
+                        </Link>
+
+                        {transitions.length > 0 && (
+                          <button
+                            onClick={() => setStatusTarget(applicant)}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 hover:border-primary-400 dark:hover:border-primary-500 text-surface-700 dark:text-surface-200 hover:text-primary-700 dark:hover:text-primary-400 text-xs font-bold transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30"
+                          >
+                            <RefreshCw size={12} />
+                            Update Status
+                          </button>
                         )}
 
                         <div className="relative">
                           <button
                             onClick={() => setOpenDropdown(openDropdown === applicant.applicationId ? null : applicant.applicationId)}
                             className="w-8 h-8 rounded-lg flex items-center justify-center text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700 hover:text-surface-700 dark:hover:text-surface-200 transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30"
+                            aria-label="More actions"
                           >
                             <MoreVertical size={15} />
                           </button>
@@ -287,17 +295,12 @@ export default function ViewApplicants() {
                           {openDropdown === applicant.applicationId && (
                             <>
                               <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
-                              <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl shadow-floating overflow-hidden min-w-[180px]">
-                                <Link
-                                  to={`/student/profile/${applicant.studentUserId}`}
-                                  onClick={() => setOpenDropdown(null)}
-                                  className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-700/50 transition-colors duration-100 cursor-pointer"
-                                >
-                                  <User size={13} /> View Profile
-                                </Link>
+                              <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl shadow-floating overflow-hidden min-w-[200px]">
                                 <button
                                   onClick={() => { handleDownloadResume(applicant.applicationId); setOpenDropdown(null); }}
-                                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-700/50 transition-colors duration-100 cursor-pointer text-left"
+                                  disabled={!applicant.hasResume}
+                                  title={applicant.hasResume ? '' : 'No resume submitted'}
+                                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-700/50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors duration-100 cursor-pointer text-left"
                                 >
                                   <Download size={13} /> Download Resume
                                 </button>
@@ -308,23 +311,6 @@ export default function ViewApplicants() {
                                 >
                                   <MessageSquare size={13} /> {messagingId === applicant.studentUserId ? 'Opening...' : 'Message Student'}
                                 </button>
-                                {transitions.length > 0 && (
-                                  <>
-                                    <div className="h-px bg-surface-100 dark:bg-surface-700/60 my-1" />
-                                    <div className="px-3 py-1.5">
-                                      <p className="text-xs font-bold text-surface-400 uppercase tracking-wide mb-1">Change Status</p>
-                                      {transitions.map((status) => (
-                                        <button
-                                          key={status}
-                                          onClick={() => changeStatus(applicant.applicationId, status)}
-                                          className="w-full text-left px-2 py-1.5 text-xs text-surface-700 dark:text-surface-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 hover:text-primary-700 dark:hover:text-primary-400 rounded-lg transition-colors duration-100 cursor-pointer capitalize"
-                                        >
-                                          {status.replace(/_/g, ' ')}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  </>
-                                )}
                               </div>
                             </>
                           )}
@@ -367,6 +353,12 @@ export default function ViewApplicants() {
           </div>
         )}
       </div>
+
+      <StatusChangeModal
+        applicant={statusTarget}
+        onClose={() => setStatusTarget(null)}
+        onSubmit={submitStatusChange}
+      />
     </DashboardLayout>
   );
 }

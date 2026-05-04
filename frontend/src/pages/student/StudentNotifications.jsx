@@ -18,7 +18,6 @@ import DashboardLayout from '../../components/DashboardLayout';
 import EmptyState from '../../components/EmptyState';
 import * as studentAPI from '../../api/student';
 
-// ── animation constants ────────────────────────────────────────────────────────
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.06 } } };
 const fadeUp = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 22 } } };
 
@@ -44,7 +43,6 @@ const TYPE_GRADIENT_MAP = {
   welcome: 'from-amber-400 to-orange-500',
 };
 
-// ── relative time helper ────────────────────────────────────────────────────────
 function timeAgo(dateStr) {
   const now = new Date();
   const date = new Date(dateStr);
@@ -62,7 +60,6 @@ function timeAgo(dateStr) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-// ── navigation target helper ────────────────────────────────────────────────────
 function getNotificationLink(notification) {
   const { referenceType, referenceId } = notification;
   switch (referenceType) {
@@ -70,14 +67,13 @@ function getNotificationLink(notification) {
       return '/student/applications';
     case 'internship':
       return `/internship/${referenceId}`;
-    case 'message':
-      return '/student/messages';
+    case 'conversation':
+      return referenceId ? `/student/messages?conversation=${referenceId}` : '/student/messages';
     default:
       return null;
   }
 }
 
-// ── pagination ──────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 20;
 
 export default function StudentNotifications() {

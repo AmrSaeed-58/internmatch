@@ -43,6 +43,7 @@ import {
   EditInternship,
   ManageInternships,
   ViewApplicants,
+  EmployerStudentProfile,
   AICandidates,
   EmployerAnalytics,
   EmployerMessages,
@@ -150,6 +151,9 @@ function AppRoutes() {
       } />
       <Route path="/employer/internship/:id/applicants" element={
         <ProtectedRoute allowedRoles={['employer']}><ViewApplicants /></ProtectedRoute>
+      } />
+      <Route path="/employer/student/:studentId" element={
+        <ProtectedRoute allowedRoles={['employer']}><EmployerStudentProfile /></ProtectedRoute>
       } />
       <Route path="/employer/candidates" element={
         <ProtectedRoute allowedRoles={['employer']}><AICandidates /></ProtectedRoute>

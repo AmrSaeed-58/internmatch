@@ -167,7 +167,7 @@ export default function EditInternship() {
       const res = await employerAPI.extractSkillsFromDescription(text);
       const incoming = res.data?.data?.skills || [];
       if (incoming.length === 0) {
-        toast.info('No skills could be extracted — try adding more detail');
+        toast.info('Couldn’t pull any skills from that. Try adding more detail.');
         return;
       }
 
@@ -218,9 +218,23 @@ export default function EditInternship() {
     if (!form.description.trim()) e.description = 'Required';
     if (!form.location.trim()) e.location = 'Required';
     if (!form.durationMonths) e.durationMonths = 'Required';
+    if (form.deadline) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      if (new Date(form.deadline) <= today) e.deadline = 'Deadline must be in the future';
+    }
+    if (form.salaryMin && form.salaryMax && parseFloat(form.salaryMax) < parseFloat(form.salaryMin)) {
+      e.salaryMax = 'Maximum salary cannot be lower than minimum';
+    }
     if (skills.length === 0) e.skills = 'At least one skill is required';
     return e;
   }
+
+  // Tomorrow as the earliest selectable deadline.
+  const minDeadline = (() => {
+    const t = new Date();
+    t.setDate(t.getDate() + 1);
+    return t.toISOString().split('T')[0];
+  })();
 
   async function handleSave(e) {
     e.preventDefault();
@@ -433,8 +447,11 @@ export default function EditInternship() {
                     <label className={labelClass}>Salary Max</label>
                     <div className="relative">
                       <DollarSign size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none" />
-                      <input name="salaryMax" type="number" min="0" value={form.salaryMax} onChange={handleChange} className={`${inputClass} pl-10`} placeholder="optional" />
+                      <input name="salaryMax" type="number" min="0" value={form.salaryMax} onChange={handleChange}
+                        className={`${inputClass} pl-10 ${errors.salaryMax ? 'border-red-400 focus:ring-red-400/30' : ''}`}
+                        placeholder="optional" />
                     </div>
+                    {errors.salaryMax && <p className={errorClass}><AlertCircle size={11} />{errors.salaryMax}</p>}
                   </div>
                 </div>
 
@@ -442,7 +459,7 @@ export default function EditInternship() {
                   <label className={labelClass}>Application Deadline</label>
                   <div className="relative">
                     <Calendar size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none" />
-                    <input name="deadline" type="date" value={form.deadline} onChange={handleChange}
+                    <input name="deadline" type="date" min={minDeadline} value={form.deadline} onChange={handleChange}
                       className={`${inputClass} pl-10 ${errors.deadline ? 'border-red-400 focus:ring-red-400/30' : ''}`} />
                   </div>
                   {errors.deadline && <p className={errorClass}><AlertCircle size={11} />{errors.deadline}</p>}

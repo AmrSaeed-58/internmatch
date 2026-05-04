@@ -13,11 +13,6 @@ const VISIBILITY_WHERE = `
   AND (i.deadline IS NULL OR i.deadline >= CURDATE())
 `;
 
-/**
- * GET /api/internships
- * List active internships with filters + pagination.
- * Optional auth: if student, include match_score per result.
- */
 const listInternships = catchAsync(async (req, res) => {
   const {
     page = 1,
@@ -156,7 +151,6 @@ const listInternships = catchAsync(async (req, res) => {
     });
   }
 
-  // ── Semantic search path ────────────────────────────────────────────
   // Step 1: Generate query embedding
   const queryEmbedding = await embeddingService.generateEmbedding(searchQuery);
 
@@ -285,10 +279,6 @@ const listInternships = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * GET /api/internships/featured
- * Featured/recent internships for landing page.
- */
 const getFeatured = catchAsync(async (req, res) => {
   const [internships] = await pool.execute(
     `SELECT
@@ -303,7 +293,6 @@ const getFeatured = catchAsync(async (req, res) => {
     LIMIT 6`
   );
 
-  // Fetch skills for featured internships
   if (internships.length > 0) {
     const ids = internships.map((i) => i.internship_id);
     const placeholders = ids.map(() => '?').join(',');
@@ -337,10 +326,6 @@ const getFeatured = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * GET /api/internships/stats
- * Platform stats for landing page.
- */
 const getStats = catchAsync(async (req, res) => {
   const [[students], [companies], [activeInternships], [matchStats]] = await Promise.all([
     pool.execute("SELECT COUNT(*) AS count FROM users WHERE role = 'student' AND is_active = TRUE"),
@@ -374,14 +359,9 @@ const getStats = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * GET /api/internships/:id
- * Get internship details with optional auth.
- */
 const getInternship = catchAsync(async (req, res) => {
   const { id } = req.params;
 
-  // Fetch the internship with employer info
   const [rows] = await pool.execute(
     `SELECT
       i.internship_id, i.employer_user_id, i.title, i.description, i.location,
@@ -403,7 +383,6 @@ const getInternship = catchAsync(async (req, res) => {
 
   const internship = rows[0];
 
-  // Check visibility
   const isPubliclyVisible =
     internship.status === 'active' &&
     internship.employer_active &&
@@ -425,7 +404,6 @@ const getInternship = catchAsync(async (req, res) => {
     } else if (role === 'employer' && internship.employer_user_id === userId) {
       isRelated = true;
     } else if (role === 'student') {
-      // Check if student applied
       const [apps] = await pool.execute(
         'SELECT application_id FROM application WHERE student_user_id = ? AND internship_id = ? LIMIT 1',
         [String(userId), String(id)]
@@ -438,7 +416,6 @@ const getInternship = catchAsync(async (req, res) => {
     }
   }
 
-  // Fetch required skills
   const [skills] = await pool.execute(
     `SELECT s.skill_id, s.display_name, rs.required_level, rs.is_mandatory
      FROM requires_skill rs
@@ -465,7 +442,6 @@ const getInternship = catchAsync(async (req, res) => {
     ).catch(() => {}); // fire-and-forget
   }
 
-  // Build response
   const data = {
     internshipId: internship.internship_id,
     title: internship.title,
@@ -507,14 +483,12 @@ const getInternship = catchAsync(async (req, res) => {
     data.skillComparison = matchData.skillComparison;
     data.matchBreakdown = matchData.breakdown;
 
-    // Check if student has bookmarked this internship
     const [bookmarks] = await pool.execute(
       'SELECT 1 FROM bookmark WHERE student_user_id = ? AND internship_id = ? LIMIT 1',
       [String(req.user.userId), String(id)]
     );
     data.isBookmarked = bookmarks.length > 0;
 
-    // Check if student has applied
     const [apps] = await pool.execute(
       'SELECT application_id, status FROM application WHERE student_user_id = ? AND internship_id = ? LIMIT 1',
       [String(req.user.userId), String(id)]
@@ -527,8 +501,6 @@ const getInternship = catchAsync(async (req, res) => {
 
   res.json({ success: true, data });
 });
-
-// ── Helpers ──
 
 /**
  * Attach required skills to a list of internship rows (batch load).
@@ -683,7 +655,6 @@ async function computeStudentMatch(studentUserId, internshipId, requiredSkills) 
     studentSkillNames[sk.skill_id] = sk.display_name;
   }
 
-  // Build skill comparison
   const skillComparison = requiredSkills.map((rs) => {
     const studentLevel = studentSkillMap[rs.skill_id] || null;
     return {

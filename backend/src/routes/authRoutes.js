@@ -7,7 +7,6 @@ const { handleValidationErrors } = require('../middleware/validate');
 
 const router = express.Router();
 
-// ── Rate limiter for auth routes: 10 requests per 15 minutes per IP ─────────────
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -16,7 +15,6 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// ── Shared password validation ──────────────────────────────────────────────────
 const passwordValidation = body('password')
   .isLength({ min: 8 })
   .withMessage('Password must be at least 8 characters long')
@@ -33,7 +31,6 @@ const newPasswordValidation = body('newPassword')
   .matches(/\d/)
   .withMessage('Password must contain at least one number');
 
-// ── POST /api/auth/register ─────────────────────────────────────────────────────
 router.post(
   '/register',
   authLimiter,
@@ -99,7 +96,6 @@ router.post(
   authController.register
 );
 
-// ── POST /api/auth/login ────────────────────────────────────────────────────────
 router.post(
   '/login',
   authLimiter,
@@ -115,7 +111,6 @@ router.post(
   authController.login
 );
 
-// ── POST /api/auth/forgot-password ──────────────────────────────────────────────
 router.post(
   '/forgot-password',
   authLimiter,
@@ -130,7 +125,6 @@ router.post(
   authController.forgotPassword
 );
 
-// ── POST /api/auth/reset-password ───────────────────────────────────────────────
 router.post(
   '/reset-password',
   authLimiter,
@@ -142,10 +136,8 @@ router.post(
   authController.resetPassword
 );
 
-// ── GET /api/auth/me ────────────────────────────────────────────────────────────
 router.get('/me', authenticate, authController.getMe);
 
-// ── POST /api/auth/logout ───────────────────────────────────────────────────────
 router.post('/logout', authenticate, authController.logout);
 
 module.exports = router;

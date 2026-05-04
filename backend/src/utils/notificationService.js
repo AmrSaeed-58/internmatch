@@ -34,7 +34,6 @@ const TYPE_TO_PREF = {
  */
 async function createNotification({ userId, type, title, message, referenceId = null, referenceType = null, io = null }) {
   try {
-    // Insert notification
     const [result] = await pool.execute(
       `INSERT INTO notification (user_id, type, title, message, reference_id, reference_type)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -57,7 +56,6 @@ async function createNotification({ userId, type, title, message, referenceId = 
       });
     }
 
-    // Check email preference
     const prefColumn = TYPE_TO_PREF[type];
     let shouldEmail = false;
 
@@ -75,7 +73,6 @@ async function createNotification({ userId, type, title, message, referenceId = 
     // have no preference row — we don't email admins unless explicitly configured
 
     if (shouldEmail) {
-      // Get user email
       const [userRows] = await pool.execute(
         'SELECT email, full_name FROM users WHERE user_id = ?',
         [String(userId)]

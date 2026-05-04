@@ -16,7 +16,6 @@ import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';
 import * as adminAPI from '../../api/admin';
 
-// ── constants ─────────────────────────────────────────────────────────────────
 const REPORT_TYPES = [
   { value: 'user_activity',            label: 'User Activity',           icon: Users },
   { value: 'internship_applications',  label: 'Internship Applications', icon: Briefcase },
@@ -47,7 +46,6 @@ function exportCSV(type, rows) {
   URL.revokeObjectURL(url);
 }
 
-// ── main ──────────────────────────────────────────────────────────────────────
 export default function AdminReports() {
   const [reportType, setReportType] = useState('user_activity');
   const [dateFrom, setDateFrom] = useState('');

@@ -3,10 +3,6 @@ const pool = require('../config/db');
 const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 
-/**
- * Verify JWT and attach user to req.user.
- * Checks tokenVersion against DB to support forced logout on password change.
- */
 const authenticate = catchAsync(async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -22,7 +18,6 @@ const authenticate = catchAsync(async (req, res, next) => {
     throw new AppError('Invalid or expired token', 401);
   }
 
-  // Verify user exists, is active, and tokenVersion matches
   const [rows] = await pool.execute(
     'SELECT user_id, full_name, email, role, is_active, token_version FROM users WHERE user_id = ?',
     [decoded.userId]
@@ -35,11 +30,12 @@ const authenticate = catchAsync(async (req, res, next) => {
   const user = rows[0];
 
   if (!user.is_active) {
-    throw new AppError('Account deactivated — contact admin', 403);
+    throw new AppError('Account deactivated. Please contact an admin.', 403);
   }
 
+  // tokenVersion mismatch means the password was changed since this token was issued.
   if (user.token_version !== decoded.tokenVersion) {
-    throw new AppError('Session expired — please log in again', 401);
+    throw new AppError('Session expired. Please log in again.', 401);
   }
 
   req.user = {
@@ -52,10 +48,6 @@ const authenticate = catchAsync(async (req, res, next) => {
   next();
 });
 
-/**
- * Factory: restrict access to specific roles.
- * @param  {...string} roles - Allowed roles
- */
 const authorize = (...roles) => (req, res, next) => {
   if (!roles.includes(req.user.role)) {
     return next(new AppError('You do not have permission to perform this action', 403));
@@ -63,10 +55,6 @@ const authorize = (...roles) => (req, res, next) => {
   next();
 };
 
-/**
- * Optional auth: authenticate if JWT present, proceed as anonymous if not.
- * Sets req.user to the verified user or null.
- */
 const optionalAuth = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {

@@ -57,7 +57,6 @@ async function findOrCreateSkill(executor, rawName, category = 'other') {
   const displayName = rawName.trim();
   const normalized = normalizeSkillName(displayName);
 
-  // ── Step 1: exact normalized match ──
   const [exactRows] = await executor.execute(
     'SELECT skill_id, display_name FROM skill WHERE normalized_name = ?',
     [normalized]
@@ -71,7 +70,6 @@ async function findOrCreateSkill(executor, rawName, category = 'other') {
     };
   }
 
-  // ── Step 2: semantic match against existing skill embeddings ──
   const newEmbedding = await generateEmbedding(displayName);
   if (newEmbedding) {
     const cache = await getCache(executor);
@@ -94,7 +92,6 @@ async function findOrCreateSkill(executor, rawName, category = 'other') {
     }
   }
 
-  // ── Step 3: insert as a new skill (with embedding cached on the row) ──
   const [inserted] = await executor.execute(
     'INSERT INTO skill (display_name, normalized_name, category, name_embedding) VALUES (?, ?, ?, ?)',
     [displayName, normalized, category, newEmbedding ? JSON.stringify(newEmbedding) : null]

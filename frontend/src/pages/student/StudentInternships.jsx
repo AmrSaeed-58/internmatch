@@ -411,7 +411,7 @@ export default function StudentInternships() {
         <EmptyState
           icon={MapPin}
           title="No internships found"
-          message={debouncedQuery ? "Try describing what you're looking for differently — our AI understands natural language!" : "Try adjusting your filters to find more opportunities."}
+          message={debouncedQuery ? "Try rephrasing your search. Plain English works too." : "Try adjusting your filters to find more opportunities."}
           actionLabel="Clear Filters"
           onAction={() => { setQuery(''); clearFilters(); }}
         />
@@ -429,9 +429,9 @@ export default function StudentInternships() {
             ))}
           </div>
 
-          {/* Pagination */}
+          {/* Pagination — windowed: first, …, current±1, …, last */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2 flex-wrap">
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -442,21 +442,36 @@ export default function StudentInternships() {
                 <ChevronLeft size={16} />
               </motion.button>
 
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                <motion.button
-                  key={p}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setPage(p)}
-                  className={`w-10 h-10 flex items-center justify-center rounded-xl text-sm font-bold transition-colors duration-200 cursor-pointer ${
-                    p === safePage
-                      ? 'bg-gradient-to-r from-primary-600 to-accent-600 text-white shadow-glow-sm'
-                      : 'border border-surface-200 dark:border-surface-700 bg-white dark:bg-dark-card text-surface-600 dark:text-surface-400 hover:border-primary-300'
-                  }`}
-                >
-                  {p}
-                </motion.button>
-              ))}
+              {(() => {
+                // Build a windowed list: always show 1 and totalPages, plus current±1.
+                // Insert null sentinels for ellipses where there are gaps.
+                const items = new Set([1, totalPages, safePage, safePage - 1, safePage + 1]);
+                const pages = [...items].filter((n) => n >= 1 && n <= totalPages).sort((a, b) => a - b);
+                const out = [];
+                for (let i = 0; i < pages.length; i += 1) {
+                  if (i > 0 && pages[i] - pages[i - 1] > 1) out.push(null);
+                  out.push(pages[i]);
+                }
+                return out.map((p, idx) =>
+                  p === null ? (
+                    <span key={`gap-${idx}`} className="w-6 text-center text-surface-400 select-none">…</span>
+                  ) : (
+                    <motion.button
+                      key={p}
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setPage(p)}
+                      className={`w-10 h-10 flex items-center justify-center rounded-xl text-sm font-bold transition-colors duration-200 cursor-pointer ${
+                        p === safePage
+                          ? 'bg-gradient-to-r from-primary-600 to-accent-600 text-white shadow-glow-sm'
+                          : 'border border-surface-200 dark:border-surface-700 bg-white dark:bg-dark-card text-surface-600 dark:text-surface-400 hover:border-primary-300'
+                      }`}
+                    >
+                      {p}
+                    </motion.button>
+                  )
+                );
+              })()}
 
               <motion.button
                 whileHover={{ scale: 1.05 }}

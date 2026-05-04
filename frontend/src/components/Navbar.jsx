@@ -137,11 +137,28 @@ export default function Navbar({ onMenuToggle, mobileMenuOpen }) {
 
   function getNotificationLink(n) {
     switch (n.referenceType) {
-      case 'application': return role === 'employer' ? '/employer/internships' : '/student/applications';
-      case 'internship': return n.referenceId ? `/internship/${n.referenceId}` : null;
-      case 'message': return `/${role}/messages`;
-      case 'user': return role === 'admin' ? '/admin/users' : null;
-      default: return null;
+      case 'application':
+        if (role === 'employer') {
+          return n.referenceId
+            ? `/employer/internship/${n.referenceId}/applicants`
+            : '/employer/internships';
+        }
+        return '/student/applications';
+      case 'internship':
+        // Employers manage their own internships — keep them inside the
+        // employer dashboard rather than the public student-facing page.
+        if (role === 'employer') return '/employer/internships';
+        if (role === 'admin') return '/admin/internships';
+        return n.referenceId ? `/internship/${n.referenceId}` : null;
+      case 'conversation':
+        if (role === 'admin') return null;
+        return n.referenceId
+          ? `/${role}/messages?conversation=${n.referenceId}`
+          : `/${role}/messages`;
+      case 'user':
+        return role === 'admin' ? '/admin/users' : null;
+      default:
+        return null;
     }
   }
 

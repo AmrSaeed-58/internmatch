@@ -1,9 +1,5 @@
 const AppError = require('../utils/AppError');
 
-/**
- * Central Express error-handling middleware.
- * Translates errors into standard { success: false, message } responses.
- */
 const errorHandler = (err, req, res, _next) => {
   // Default to 500 internal server error
   let statusCode = err.statusCode || 500;

@@ -21,12 +21,11 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import API from '../../api/axios';
 
-// ─── Branding Panel ───────────────────────────────────────────────────────────
 function BrandPanel() {
   const features = [
-    'AI-powered skill matching with 92%+ accuracy',
-    'Semantic resume analysis via Gemini AI',
-    'Transparent match scores — know exactly why you fit',
+    'Skill matching that picks up details a keyword search would miss',
+    'Resume analysis powered by Gemini',
+    'Match scores that show why you fit, not just a number',
     'Real-time messaging with employers',
   ];
 
@@ -67,7 +66,7 @@ function BrandPanel() {
           Find internships that actually fit you
         </h2>
         <p className="text-primary-100 leading-relaxed text-base mb-8 max-w-sm animate-fade-in-up">
-          Our hybrid AI scores your profile against every internship — so you apply smarter, not harder.
+          Your profile is scored against every internship, so you can spend your time on the ones worth applying to.
         </p>
         <ul className="space-y-3.5 stagger-children">
           {features.map((f) => (
@@ -100,7 +99,6 @@ function BrandPanel() {
   );
 }
 
-// ─── Login Form ───────────────────────────────────────────────────────────────
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -340,8 +338,8 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="px-6 py-4 text-center text-xs text-surface-400 dark:text-surface-500">
           &copy; {new Date().getFullYear()} InternMatch &middot;{' '}
-          <button type="button" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Privacy</button> &middot;{' '}
-          <button type="button" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Terms</button>
+          <Link to="/privacy" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Privacy</Link> &middot;{' '}
+          <Link to="/terms" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Terms</Link>
         </div>
       </div>
     </div>

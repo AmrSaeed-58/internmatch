@@ -10,7 +10,6 @@ const router = express.Router();
 // All routes require employer auth
 router.use(authenticate, authorize('employer'));
 
-// ── Profile ─────────────────────────────────────────────────────────────────────
 router.get('/profile', employerController.getProfile);
 
 router.put(
@@ -62,11 +61,9 @@ router.put(
   employerController.updateProfile
 );
 
-// ── Profile Picture & Logo ──────────────────────────────────────────────────────
 router.post('/profile/picture', uploadPictureMiddleware, employerController.uploadProfilePicture);
 router.post('/profile/logo', uploadLogoMiddleware, employerController.uploadCompanyLogo);
 
-// ── AI: Extract Skills from Job Description ────────────────────────────────────
 router.post(
   '/extract-skills',
   [
@@ -81,7 +78,6 @@ router.post(
   employerController.extractSkillsFromJobDescription
 );
 
-// ── Internships ─────────────────────────────────────────────────────────────────
 router.post(
   '/internships',
   [
@@ -193,7 +189,6 @@ router.delete(
   employerController.deleteInternship
 );
 
-// ── Applicants ──────────────────────────────────────────────────────────────────
 router.get(
   '/internships/:id/applicants',
   [param('id').isInt().withMessage('Invalid internship ID')],
@@ -201,13 +196,19 @@ router.get(
   employerController.getApplicants
 );
 
-// ── Application Status ──────────────────────────────────────────────────────────
+router.get(
+  '/applicants/:studentId/profile',
+  [param('studentId').isInt().withMessage('Invalid student ID')],
+  handleValidationErrors,
+  employerController.getApplicantProfile
+);
+
 router.put(
   '/applications/:id/status',
   [
     param('id').isInt().withMessage('Invalid application ID'),
     body('status')
-      .isIn(['reviewing', 'shortlisted', 'interview_scheduled', 'accepted', 'rejected'])
+      .isIn(['under_review', 'interview_scheduled', 'accepted', 'rejected'])
       .withMessage('Invalid status'),
     body('note')
       .optional({ values: 'null' })
@@ -217,7 +218,6 @@ router.put(
   employerController.updateApplicationStatus
 );
 
-// ── Resume Download ─────────────────────────────────────────────────────────────
 router.get(
   '/applications/:id/resume',
   [param('id').isInt().withMessage('Invalid application ID')],
@@ -225,7 +225,6 @@ router.get(
   employerController.downloadResume
 );
 
-// ── AI Candidates ───────────────────────────────────────────────────────────────
 router.get('/top-candidates', employerController.getTopCandidates);
 
 router.get(
@@ -235,7 +234,6 @@ router.get(
   employerController.getCandidates
 );
 
-// ── Invite Student ──────────────────────────────────────────────────────────────
 router.post(
   '/internships/:internshipId/invite/:studentId',
   [
@@ -249,10 +247,8 @@ router.post(
   employerController.inviteStudent
 );
 
-// ── Analytics ───────────────────────────────────────────────────────────────────
 router.get('/analytics', employerController.getAnalytics);
 
-// ── Notifications ───────────────────────────────────────────────────────────────
 router.get('/notifications', employerController.getNotifications);
 
 router.put(
@@ -264,7 +260,6 @@ router.put(
 
 router.put('/notifications/read-all', employerController.markAllNotificationsRead);
 
-// ── Change Password ─────────────────────────────────────────────────────────────
 router.put(
   '/change-password',
   [
@@ -281,11 +276,9 @@ router.put(
   employerController.changePassword
 );
 
-// ── Notification Preferences ────────────────────────────────────────────────────
 router.get('/notification-preferences', employerController.getNotificationPreferences);
 router.put('/notification-preferences', employerController.updateNotificationPreferences);
 
-// ── Delete Account ──────────────────────────────────────────────────────────────
 router.delete(
   '/account',
   [body('password').notEmpty().withMessage('Password confirmation is required')],

@@ -8,10 +8,8 @@ const { handleValidationErrors } = require('../middleware/validate');
 // All admin routes require authentication + admin role
 router.use(authenticate, authorize('admin'));
 
-// ── Dashboard ────────────────────────────────────────────────────────────────────
 router.get('/dashboard-stats', adminController.getDashboardStats);
 
-// ── User Management ──────────────────────────────────────────────────────────────
 router.get('/users', adminController.getUsers);
 
 router.get('/users/:id',
@@ -40,7 +38,6 @@ router.delete('/users/:id',
   adminController.deleteUser
 );
 
-// ── Internship Management ────────────────────────────────────────────────────────
 router.get('/internships', adminController.getInternships);
 
 router.put('/internships/:id/approve',
@@ -62,11 +59,9 @@ router.delete('/internships/:id',
   adminController.deleteInternship
 );
 
-// ── System Logs ──────────────────────────────────────────────────────────────────
 router.get('/logs', adminController.getLogs);
 router.get('/logs/export', adminController.exportLogs);
 
-// ── Reports ──────────────────────────────────────────────────────────────────────
 router.post('/reports/generate',
   body('reportType').notEmpty().withMessage('Report type is required'),
   body('startDate').optional().isISO8601().withMessage('Invalid start date'),
@@ -77,7 +72,6 @@ router.post('/reports/generate',
 
 router.get('/reports/export', adminController.exportReport);
 
-// ── Notifications ────────────────────────────────────────────────────────────────
 router.get('/notifications', adminController.getNotifications);
 
 router.put('/notifications/:id/read',
@@ -88,7 +82,6 @@ router.put('/notifications/:id/read',
 
 router.put('/notifications/read-all', adminController.markAllNotificationsRead);
 
-// ── Change Password ──────────────────────────────────────────────────────────────
 router.put('/change-password',
   body('currentPassword').notEmpty().withMessage('Current password is required'),
   body('newPassword').isLength({ min: 8 }).withMessage('New password must be at least 8 characters')

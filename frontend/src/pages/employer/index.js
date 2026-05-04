@@ -4,6 +4,7 @@ export { default as PostInternship } from './PostInternship';
 export { default as EditInternship } from './EditInternship';
 export { default as ManageInternships } from './ManageInternships';
 export { default as ViewApplicants } from './ViewApplicants';
+export { default as EmployerStudentProfile } from './EmployerStudentProfile';
 export { default as AICandidates } from './AICandidates';
 export { default as EmployerAnalytics } from './EmployerAnalytics';
 export { default as EmployerMessages } from './EmployerMessages';

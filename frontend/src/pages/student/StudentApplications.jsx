@@ -296,7 +296,7 @@ export default function StudentApplications() {
                 <div className="relative p-5 flex flex-col sm:flex-row sm:items-center gap-4">
                   {/* Company avatar */}
                   <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${gradients[idx]} flex items-center justify-center text-white font-bold text-base shrink-0 shadow-lg`}>
-                    {app.companyName.charAt(0)}
+                    {(app.companyName || '?').charAt(0)}
                   </div>
 
                   {/* Title + company */}
@@ -310,7 +310,7 @@ export default function StudentApplications() {
                         <Calendar size={11} />
                         Applied {formatDate(app.appliedDate)}
                       </span>
-                      {app.statusUpdatedAt !== app.appliedDate && (
+                      {app.statusUpdatedAt && new Date(app.statusUpdatedAt).getTime() !== new Date(app.appliedDate).getTime() && (
                         <span className="flex items-center gap-1">
                           <TrendingUp size={11} />
                           Updated {formatDate(app.statusUpdatedAt)}

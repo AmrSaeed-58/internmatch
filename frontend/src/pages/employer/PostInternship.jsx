@@ -134,7 +134,7 @@ export default function PostInternship() {
       const res = await employerAPI.extractSkillsFromDescription(text);
       const incoming = res.data?.data?.skills || [];
       if (incoming.length === 0) {
-        toast.info('No skills could be extracted — try adding more detail');
+        toast.info('Couldn’t pull any skills from that. Try adding more detail.');
         return;
       }
 
@@ -186,10 +186,26 @@ export default function PostInternship() {
     if (!form.description.trim()) e.description = 'Description is required';
     if (!form.location.trim()) e.location = 'Location is required';
     if (!form.durationMonths) e.durationMonths = 'Duration is required';
+    if (form.deadline) {
+      // Compare against today at local midnight so a same-day deadline counts as past.
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      if (new Date(form.deadline) <= today) e.deadline = 'Deadline must be in the future';
+    }
+    if (form.salaryMin && form.salaryMax && parseFloat(form.salaryMax) < parseFloat(form.salaryMin)) {
+      e.salaryMax = 'Maximum salary cannot be lower than minimum';
+    }
     // Deadline is optional per spec
     if (skills.length === 0) e.skills = 'Add at least one required skill';
     return e;
   }
+
+  // Tomorrow as the earliest selectable deadline. Pre-formatted for the
+  // <input type="date"> min attribute.
+  const minDeadline = (() => {
+    const t = new Date();
+    t.setDate(t.getDate() + 1);
+    return t.toISOString().split('T')[0];
+  })();
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -414,10 +430,13 @@ export default function PostInternship() {
                         min="0"
                         value={form.salaryMax}
                         onChange={handleChange}
-                        className={`${inputClass} pl-10`}
+                        className={`${inputClass} pl-10 ${errors.salaryMax ? 'border-red-400 focus:ring-red-400/30' : ''}`}
                         placeholder="600"
                       />
                     </div>
+                    {errors.salaryMax && (
+                      <p className={errorClass}><AlertCircle size={11} />{errors.salaryMax}</p>
+                    )}
                   </div>
                 </div>
 
@@ -428,6 +447,7 @@ export default function PostInternship() {
                     <input
                       name="deadline"
                       type="date"
+                      min={minDeadline}
                       value={form.deadline}
                       onChange={handleChange}
                       className={`${inputClass} pl-10 ${errors.deadline ? 'border-red-400 focus:ring-red-400/30' : ''}`}

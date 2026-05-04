@@ -6,7 +6,6 @@ const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 const { sendEmail } = require('../config/email');
 
-// ── Constants ────────────────────────────────────────────────────────────────────
 const BCRYPT_SALT_ROUNDS = 12;
 
 const VALID_INDUSTRIES = [
@@ -20,8 +19,6 @@ const VALID_INDUSTRIES = [
 ];
 
 const VALID_COMPANY_SIZES = ['1-50', '51-200', '201-500', '500+'];
-
-// ── Helpers ──────────────────────────────────────────────────────────────────────
 
 function signToken(userId, role, tokenVersion, rememberMe = false) {
   return jwt.sign(
@@ -46,30 +43,25 @@ async function logAction(userId, action, details, ipAddress) {
       [userId, action, details, ipAddress]
     );
   } catch (err) {
-    // Log failures should not break the request
     console.error('System log insert failed:', err.message);
   }
 }
 
-// ── POST /api/auth/register ──────────────────────────────────────────────────────
 const register = catchAsync(async (req, res) => {
   const { fullName, email, password, role } = req.body;
 
-  // Hash password
   const hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
-    // Insert into users
     const [userResult] = await connection.execute(
       'INSERT INTO users (full_name, email, password, role) VALUES (?, ?, ?, ?)',
       [fullName, email, hashedPassword, role]
     );
     const userId = userResult.insertId;
 
-    // Insert into role-specific table
     if (role === 'student') {
       const { university, major, graduationYear, gender, dateOfBirth } = req.body;
       await connection.execute(
@@ -84,7 +76,6 @@ const register = catchAsync(async (req, res) => {
       );
     }
 
-    // Create notification preferences (students & employers only, not admins)
     await connection.execute(
       'INSERT INTO notification_preference (user_id) VALUES (?)',
       [userId]
@@ -92,17 +83,15 @@ const register = catchAsync(async (req, res) => {
 
     await connection.commit();
 
-    // Side effects (non-blocking)
     logAction(userId, 'user_registered', JSON.stringify({ role }), req.ip);
 
-    // Welcome email
     sendEmail(
       email,
       'Welcome to InternMatch!',
       `<h2>Welcome to InternMatch, ${fullName}!</h2>
        <p>Your account has been created successfully as a <strong>${role}</strong>.</p>
        <p>You can now <a href="${process.env.CLIENT_URL || 'http://localhost:3000'}/login">log in</a> and start exploring.</p>
-       <p>— The InternMatch Team</p>`
+       <p>The InternMatch Team</p>`
     );
 
     res.status(201).json({
@@ -117,11 +106,9 @@ const register = catchAsync(async (req, res) => {
   }
 });
 
-// ── POST /api/auth/login ─────────────────────────────────────────────────────────
 const login = catchAsync(async (req, res) => {
   const { email, password, rememberMe } = req.body;
 
-  // Fetch user
   const [rows] = await pool.execute(
     'SELECT user_id, full_name, email, password, role, is_active, profile_picture, token_version FROM users WHERE email = ?',
     [email]
@@ -133,21 +120,17 @@ const login = catchAsync(async (req, res) => {
 
   const user = rows[0];
 
-  // Check password
   const passwordMatch = await bcrypt.compare(password, user.password);
   if (!passwordMatch) {
     throw new AppError('Invalid email or password', 401);
   }
 
-  // Check active
   if (!user.is_active) {
-    throw new AppError('Account deactivated — contact admin', 403);
+    throw new AppError('Account deactivated. Please contact an admin.', 403);
   }
 
-  // Sign token
   const token = signToken(user.user_id, user.role, user.token_version, rememberMe);
 
-  // Build user response with role-specific fields
   const userData = {
     userId: user.user_id,
     fullName: user.full_name,
@@ -190,8 +173,7 @@ const login = catchAsync(async (req, res) => {
     }
   }
 
-  // Log
-  logAction(user.user_id, 'user_logged_in', null, req.ip);
+  logAction(user.user_id, 'user_login', null, req.ip);
 
   res.status(200).json({
     success: true,
@@ -200,11 +182,10 @@ const login = catchAsync(async (req, res) => {
   });
 });
 
-// ── POST /api/auth/forgot-password ───────────────────────────────────────────────
 const forgotPassword = catchAsync(async (req, res) => {
   const { email } = req.body;
 
-  // Always return same response to prevent email enumeration
+  // Always return the same response to prevent email enumeration.
   const successMessage = 'If an account with this email exists, a reset link has been sent.';
 
   const [rows] = await pool.execute(
@@ -218,11 +199,8 @@ const forgotPassword = catchAsync(async (req, res) => {
 
   const user = rows[0];
 
-  // Generate raw token (32 bytes = 64 hex chars)
   const rawToken = crypto.randomBytes(32).toString('hex');
   const tokenHash = hashResetToken(rawToken);
-
-  // Expires in 1 hour
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
   await pool.execute(
@@ -230,7 +208,6 @@ const forgotPassword = catchAsync(async (req, res) => {
     [user.user_id, tokenHash, expiresAt]
   );
 
-  // Send reset email
   const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/reset-password?token=${rawToken}`;
   sendEmail(
     email,
@@ -240,13 +217,12 @@ const forgotPassword = catchAsync(async (req, res) => {
      <p>You requested a password reset. Click the link below to set a new password:</p>
      <p><a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#4f46e5;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Reset Password</a></p>
      <p>This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
-     <p>— The InternMatch Team</p>`
+     <p>The InternMatch Team</p>`
   );
 
   res.status(200).json({ success: true, message: successMessage });
 });
 
-// ── POST /api/auth/reset-password ────────────────────────────────────────────────
 const resetPassword = catchAsync(async (req, res) => {
   const { token, newPassword } = req.body;
 
@@ -256,7 +232,6 @@ const resetPassword = catchAsync(async (req, res) => {
 
   const tokenHash = hashResetToken(token);
 
-  // Find valid, unused, non-expired token
   const [rows] = await pool.execute(
     `SELECT token_id, user_id
      FROM password_reset_token
@@ -270,20 +245,17 @@ const resetPassword = catchAsync(async (req, res) => {
 
   const { token_id: tokenId, user_id: userId } = rows[0];
 
-  // Hash new password
   const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS);
 
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
-    // Update password and increment token_version
     await connection.execute(
       'UPDATE users SET password = ?, token_version = token_version + 1 WHERE user_id = ?',
       [hashedPassword, userId]
     );
 
-    // Mark token as used
     await connection.execute(
       'UPDATE password_reset_token SET used = 1 WHERE token_id = ?',
       [tokenId]
@@ -305,11 +277,9 @@ const resetPassword = catchAsync(async (req, res) => {
   });
 });
 
-// ── GET /api/auth/me ─────────────────────────────────────────────────────────────
 const getMe = catchAsync(async (req, res) => {
   const { userId } = req.user;
 
-  // Base user data
   const [userRows] = await pool.execute(
     'SELECT user_id, full_name, email, role, is_active, profile_picture, created_at, updated_at FROM users WHERE user_id = ?',
     [userId]
@@ -331,7 +301,6 @@ const getMe = catchAsync(async (req, res) => {
     updatedAt: u.updated_at,
   };
 
-  // Role-specific data
   if (u.role === 'student') {
     const [rows] = await pool.execute(
       `SELECT major, university, university_start_date, graduation_year, gpa, bio,
@@ -389,7 +358,6 @@ const getMe = catchAsync(async (req, res) => {
   res.status(200).json({ success: true, data });
 });
 
-// ── POST /api/auth/logout ────────────────────────────────────────────────────────
 const logout = catchAsync(async (req, res) => {
   logAction(req.user.userId, 'user_logged_out', null, req.ip);
 

@@ -333,6 +333,7 @@ export default function InternshipDetailPage() {
             deadline: d.deadline,
             createdAt: d.createdAt,
             status: d.status,
+            employer: d.employer,
             companyName: d.employer?.companyName,
             companyLogo: d.employer?.companyLogo,
             industry: d.employer?.industry,
@@ -385,6 +386,10 @@ export default function InternshipDetailPage() {
   }, [isStudent]);
 
   async function handleBookmarkToggle() {
+    if (!isStudent) {
+      navigate('/login', { state: { message: 'Sign in as a student to save internships.' } });
+      return;
+    }
     try {
       const { addBookmark, removeBookmark } = await import('../../api/student');
       if (bookmarked) {
@@ -399,6 +404,14 @@ export default function InternshipDetailPage() {
       setBookmarked((p) => !p);
       toast.success(bookmarked ? 'Removed from saved' : 'Saved to bookmarks');
     }
+  }
+
+  function handleApplyClick() {
+    if (!isStudent) {
+      navigate('/login', { state: { message: 'Sign in as a student to apply.' } });
+      return;
+    }
+    setShowModal(true);
   }
 
   if (loading) {
@@ -452,8 +465,16 @@ export default function InternshipDetailPage() {
 
   const descParagraphs = (internship.description || '').split('\n').filter(Boolean);
 
-  const applyDisabled = isExpired || internship.isActive === false || internship.hasApplied;
-  const applyLabel = internship.hasApplied
+  // Anonymous viewers see an enabled "Sign in to apply" CTA that routes to
+  // /login. Once signed in, the apply button reflects the real application
+  // state. We only disable when the listing is closed/expired/already applied.
+  const applyDisabled =
+    isStudent && (isExpired || internship.isActive === false || internship.hasApplied);
+  const applyLabel = !user
+    ? 'Sign in to apply'
+    : !isStudent
+    ? 'Students only'
+    : internship.hasApplied
     ? `Applied · ${internship.applicationStatus || 'pending'}`
     : isExpired
     ? 'Deadline passed'
@@ -619,7 +640,7 @@ export default function InternshipDetailPage() {
                 {openingChat ? 'Opening...' : 'Message'}
               </button>
               <button
-                onClick={() => setShowModal(true)}
+                onClick={handleApplyClick}
                 disabled={applyDisabled}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold bg-gradient-to-r from-primary-600 to-primary-800 text-white hover:shadow-glow-md disabled:opacity-50 disabled:cursor-not-allowed transition-[box-shadow] cursor-pointer"
               >
@@ -874,7 +895,7 @@ export default function InternshipDetailPage() {
                   Take the next step toward your career.
                 </h3>
                 <button
-                  onClick={() => setShowModal(true)}
+                  onClick={handleApplyClick}
                   disabled={applyDisabled}
                   className="relative w-full inline-flex items-center justify-center gap-2 py-3 rounded-2xl bg-white text-primary-800 font-bold text-sm hover:bg-accent-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >

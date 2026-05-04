@@ -90,17 +90,27 @@ export default function StudentDashboard() {
   const [profile, setProfile] = useState(null);
   const [skills, setSkills] = useState([]);
   const [topRecs, setTopRecs] = useState([]);
+  const [counts, setCounts] = useState({ applications: 0, saved: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [profileRes, skillsRes] = await Promise.all([
+        // Pull profile + skills + counts (applications, bookmarks) in parallel.
+        // Each list endpoint returns pagination.total, which is what we want
+        // for the stat cards — paging through to count would be wasteful.
+        const [profileRes, skillsRes, appsRes, bookmarksRes] = await Promise.all([
           studentAPI.getProfile(),
           studentAPI.getSkills(),
+          studentAPI.getApplications({ page: 1, limit: 1 }).catch(() => null),
+          studentAPI.getBookmarks({ page: 1, limit: 1 }).catch(() => null),
         ]);
         setProfile(profileRes.data.data);
         setSkills(skillsRes.data.data);
+        setCounts({
+          applications: appsRes?.data?.pagination?.total ?? 0,
+          saved: bookmarksRes?.data?.pagination?.total ?? 0,
+        });
 
         try {
           const recsRes = await studentAPI.getRecommendations({ page: 1, limit: 5 });
@@ -217,8 +227,22 @@ export default function StudentDashboard() {
         transition={{ duration: 0.4, delay: 0.1 }}
         className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8"
       >
-        <StatCard icon={FileText} label="Applications" value={0} sub="Start applying today" gradient="from-blue-500 to-blue-700" to="/student/applications" />
-        <StatCard icon={Bookmark} label="Saved" value={0} sub="Bookmark favorites" gradient="from-pink-500 to-rose-600" to="/student/saved" />
+        <StatCard
+          icon={FileText}
+          label="Applications"
+          value={counts.applications}
+          sub={counts.applications === 0 ? 'Start applying today' : 'Track your progress'}
+          gradient="from-blue-500 to-blue-700"
+          to="/student/applications"
+        />
+        <StatCard
+          icon={Bookmark}
+          label="Saved"
+          value={counts.saved}
+          sub={counts.saved === 0 ? 'Bookmark favorites' : 'Quick-access list'}
+          gradient="from-pink-500 to-rose-600"
+          to="/student/saved"
+        />
         <StatCard icon={TrendingUp} label="Skills" value={skills.length} sub={skills.length === 0 ? 'Add your skills' : 'Keep growing'} gradient="from-amber-500 to-orange-600" to="/student/profile" />
         <StatCard icon={Award} label="Profile" value={`${profileStrength}%`} sub="Complete your profile" gradient="from-primary-500 to-accent-600" to="/student/profile" />
       </motion.div>
@@ -239,7 +263,7 @@ export default function StudentDashboard() {
               <div className="flex-1 min-w-0">
                 <h3 className="font-heading font-bold text-xl text-surface-900 dark:text-white mb-2">Profile Strength</h3>
                 <p className="text-sm text-surface-500 dark:text-surface-400 mb-4">
-                  A complete profile gets up to <span className="font-bold text-primary-600 dark:text-primary-300">3x more matches</span>. Add more details to unlock better opportunities.
+                  Filling out the rest of your profile helps employers and the matcher score you accurately. The more we know, the better the suggestions.
                 </p>
                 <Link
                   to="/student/profile"

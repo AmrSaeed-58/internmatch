@@ -33,7 +33,6 @@ const GRADUATION_YEARS = Array.from({ length: 8 }, (_, i) => new Date().getFullY
 
 const GENDER_OPTIONS = ['Male', 'Female'];
 
-// ─── Password strength indicator ──────────────────────────────────────────────
 function PasswordStrength({ password }) {
   const checks = [
     { label: 'At least 8 characters', pass: password.length >= 8 },
@@ -71,7 +70,6 @@ function PasswordStrength({ password }) {
   );
 }
 
-// ─── Form Field ───────────────────────────────────────────────────────────────
 function Field({ id, label, error, required, children }) {
   return (
     <div>
@@ -104,7 +102,6 @@ const selectCls = (hasError) =>
       : 'border-surface-200 dark:border-surface-700 focus:ring-primary-500/30 focus:border-primary-400 dark:focus:border-primary-500'
   } rounded-xl text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:border-transparent transition-colors duration-200 cursor-pointer`;
 
-// ─── Student Form ─────────────────────────────────────────────────────────────
 function StudentForm({ onSuccess }) {
   const [form, setForm] = useState({
     fullName: '', email: '', password: '', confirmPassword: '',
@@ -280,9 +277,9 @@ function StudentForm({ onSuccess }) {
             className="mt-0.5 w-4 h-4 rounded border-surface-300 dark:border-surface-600 text-primary-600 focus:ring-primary-500/30 bg-surface-50 dark:bg-surface-800 cursor-pointer" />
           <label htmlFor="s-terms" className="text-sm text-surface-600 dark:text-surface-300 cursor-pointer">
             I agree to the{' '}
-            <button type="button" className="text-primary-600 dark:text-primary-400 hover:underline">Terms of Service</button>
+            <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">Terms of Service</Link>
             {' '}and{' '}
-            <button type="button" className="text-primary-600 dark:text-primary-400 hover:underline">Privacy Policy</button>
+            <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">Privacy Policy</Link>
           </label>
         </div>
         {errors.terms && (
@@ -310,7 +307,6 @@ function StudentForm({ onSuccess }) {
   );
 }
 
-// ─── Employer Form ────────────────────────────────────────────────────────────
 function EmployerForm({ onSuccess }) {
   const [form, setForm] = useState({
     fullName: '', email: '', password: '', confirmPassword: '',
@@ -463,9 +459,9 @@ function EmployerForm({ onSuccess }) {
             className="mt-0.5 w-4 h-4 rounded border-surface-300 dark:border-surface-600 text-primary-600 focus:ring-primary-500/30 bg-surface-50 dark:bg-surface-800 cursor-pointer" />
           <label htmlFor="e-terms" className="text-sm text-surface-600 dark:text-surface-300 cursor-pointer">
             I agree to the{' '}
-            <button type="button" className="text-primary-600 dark:text-primary-400 hover:underline">Terms of Service</button>
+            <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">Terms of Service</Link>
             {' '}and{' '}
-            <button type="button" className="text-primary-600 dark:text-primary-400 hover:underline">Privacy Policy</button>
+            <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">Privacy Policy</Link>
           </label>
         </div>
         {errors.terms && (
@@ -493,7 +489,6 @@ function EmployerForm({ onSuccess }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function RegisterPage() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
@@ -635,8 +630,8 @@ export default function RegisterPage() {
         {/* Footer */}
         <div className="px-6 py-4 text-center text-xs text-surface-400 dark:text-surface-500">
           &copy; {new Date().getFullYear()} InternMatch &middot;{' '}
-          <button type="button" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Privacy</button> &middot;{' '}
-          <button type="button" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Terms</button>
+          <Link to="/privacy" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Privacy</Link> &middot;{' '}
+          <Link to="/terms" className="hover:text-surface-600 dark:hover:text-surface-300 transition-colors duration-200 cursor-pointer">Terms</Link>
         </div>
       </div>
     </div>

@@ -10,7 +10,6 @@ const router = express.Router();
 // All routes require student auth
 router.use(authenticate, authorize('student'));
 
-// ── Profile ─────────────────────────────────────────────────────────────────────
 router.get('/profile', studentController.getProfile);
 
 router.put(
@@ -64,11 +63,9 @@ router.put(
   studentController.updateProfile
 );
 
-// ── Profile Picture ──────────────────────────────────────────────────────────────
 router.post('/profile/picture', uploadPictureMiddleware, studentController.uploadProfilePicture);
 router.delete('/profile/picture', studentController.deleteProfilePicture);
 
-// ── Resume ───────────────────────────────────────────────────────────────────────
 router.post('/resume/upload', uploadResumeMiddleware, studentController.uploadResume);
 router.post(
   '/resume/confirm',
@@ -82,7 +79,6 @@ router.post(
 router.get('/resume', studentController.getResume);
 router.delete('/resume', studentController.deleteResume);
 
-// ── Skills ───────────────────────────────────────────────────────────────────────
 router.get('/skills', studentController.getSkills);
 
 router.post(
@@ -119,7 +115,6 @@ router.delete(
   studentController.deleteSkill
 );
 
-// ── Applications ────────────────────────────────────────────────────────────────
 router.get('/applications', studentController.getApplications);
 
 router.get(
@@ -156,10 +151,8 @@ router.put(
   studentController.withdrawApplication
 );
 
-// ── Recommendations ─────────────────────────────────────────────────────────────
 router.get('/recommendations', studentController.getRecommendations);
 
-// ── Bookmarks ───────────────────────────────────────────────────────────────────
 router.get('/bookmarks', studentController.getBookmarks);
 
 router.post(
@@ -176,7 +169,6 @@ router.delete(
   studentController.removeBookmark
 );
 
-// ── Change Password ──────────────────────────────────────────────────────────────
 router.put(
   '/change-password',
   [
@@ -193,7 +185,6 @@ router.put(
   studentController.changePassword
 );
 
-// ── Notifications ───────────────────────────────────────────────────────────────
 router.get('/notifications', studentController.getNotifications);
 router.put('/notifications/read-all', studentController.markAllNotificationsRead);
 router.put(
@@ -203,11 +194,9 @@ router.put(
   studentController.markNotificationRead
 );
 
-// ── Notification Preferences ─────────────────────────────────────────────────────
 router.get('/notification-preferences', studentController.getNotificationPreferences);
 router.put('/notification-preferences', studentController.updateNotificationPreferences);
 
-// ── Delete Account ───────────────────────────────────────────────────────────────
 router.delete(
   '/account',
   [body('password').notEmpty().withMessage('Password confirmation is required')],
