@@ -29,11 +29,11 @@ const resumeFilter = (req, file, cb) => {
 };
 
 const imageFilter = (req, file, cb) => {
-  const allowedMimes = ['image/jpeg', 'image/png'];
+  const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
   if (allowedMimes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new AppError('Only JPG and PNG images are allowed', 400), false);
+    cb(new AppError('Only JPG, PNG, and WebP images are allowed', 400), false);
   }
 };
 

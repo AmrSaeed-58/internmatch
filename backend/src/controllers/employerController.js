@@ -979,7 +979,7 @@ const updateApplicationStatus = catchAsync(async (req, res) => {
     await connection.beginTransaction();
 
     await connection.execute(
-      'UPDATE application SET status = ? WHERE application_id = ?',
+      'UPDATE application SET status = ?, status_updated_at = NOW() WHERE application_id = ?',
       [status, id]
     );
 

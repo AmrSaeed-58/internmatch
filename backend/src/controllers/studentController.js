@@ -255,7 +255,8 @@ const uploadResume = catchAsync(async (req, res) => {
         filePath,
         originalFilename,
         fileType,
-        extractedText: extractedText.substring(0, 500), // preview only
+        extractedText,
+        extractedTextPreview: extractedText.substring(0, 500),
       },
       extractedSkills,
     },
@@ -298,8 +299,8 @@ const confirmResume = catchAsync(async (req, res) => {
     }
 
     const [insertResult] = await connection.execute(
-      'INSERT INTO resume (student_user_id, file_path, original_filename, file_type) VALUES (?, ?, ?, ?)',
-      [userId, staging.filePath, staging.originalFilename, staging.fileType]
+      'INSERT INTO resume (student_user_id, file_path, original_filename, file_type, extracted_text) VALUES (?, ?, ?, ?, ?)',
+      [userId, staging.filePath, staging.originalFilename, staging.fileType, staging.extractedText || null]
     );
     const newResumeId = insertResult.insertId;
 
@@ -1083,7 +1084,7 @@ const getApplicationHistory = catchAsync(async (req, res) => {
 
   const [rows] = await pool.execute(
     `SELECT
-      h.old_status, h.new_status, h.note, h.created_at,
+      h.old_status, h.new_status, h.created_at,
       u.full_name AS changed_by_name, u.role AS changed_by_role
     FROM application_status_history h
     LEFT JOIN users u ON h.changed_by_user_id = u.user_id
@@ -1097,7 +1098,6 @@ const getApplicationHistory = catchAsync(async (req, res) => {
     data: rows.map((r) => ({
       oldStatus: r.old_status,
       newStatus: r.new_status,
-      note: r.note,
       createdAt: r.created_at,
       changedBy: r.changed_by_name,
       changedByRole: r.changed_by_role,
@@ -1153,52 +1153,98 @@ const applyToInternship = catchAsync(async (req, res) => {
     throw new AppError('Application deadline has passed', 400);
   }
 
-  // Compute match score
-  const matchScore = await computeMatchScore(studentId, internshipId);
+  const { computeSkillScore, computeProfileBonus } = require('./internshipController');
 
-  let applicationId;
-  try {
-    const [result] = await pool.execute(
-      `INSERT INTO application
-        (student_user_id, internship_id, resume_id, submitted_resume_path,
-         submitted_resume_filename, cover_letter, match_score, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
-      [
-        String(studentId),
-        String(internshipId),
-        String(resume.resume_id),
-        resume.file_path,
-        resume.original_filename,
-        coverLetter || null,
-        matchScore != null ? matchScore.toFixed(2) : null,
-      ]
-    );
-    applicationId = result.insertId;
-  } catch (err) {
-    if (err.code === 'ER_DUP_ENTRY') {
-      throw new AppError('You have already applied to this internship', 409);
-    }
-    throw err;
+  const [requiredSkills] = await pool.execute(
+    `SELECT skill_id, required_level, is_mandatory
+     FROM requires_skill WHERE internship_id = ?`,
+    [String(internshipId)]
+  );
+  const formattedReqSkills = requiredSkills.map((rs) => ({
+    skillId: rs.skill_id,
+    requiredLevel: rs.required_level,
+    isMandatory: !!rs.is_mandatory,
+  }));
+
+  const [studentSkills] = await pool.execute(
+    'SELECT skill_id, proficiency_level FROM has_skill WHERE student_user_id = ?',
+    [String(studentId)]
+  );
+  const studentSkillMap = {};
+  for (const sk of studentSkills) {
+    studentSkillMap[sk.skill_id] = sk.proficiency_level;
   }
 
-  await pool.execute(
-    `INSERT INTO application_status_history
-      (application_id, old_status, new_status, changed_by_user_id)
-     VALUES (?, NULL, 'pending', ?)`,
-    [String(applicationId), String(studentId)]
-  );
+  const profileBonus = await computeProfileBonus(studentId);
+  const semanticScore = await embeddingService.computeSemanticScore(studentId, internshipId);
 
-  await pool.execute(
-    `INSERT INTO notification
-      (user_id, type, title, message, reference_id, reference_type)
-     VALUES (?, 'new_application', ?, ?, ?, 'application')`,
-    [
-      String(internship.employer_user_id),
-      `New application for "${internship.title}"`,
-      `A student has applied to your internship "${internship.title}".`,
-      String(internshipId),
-    ]
-  );
+  let matchScore;
+  if (formattedReqSkills.length === 0) {
+    matchScore = profileBonus * 100;
+  } else {
+    const skillScore = computeSkillScore(formattedReqSkills, studentSkillMap);
+    if (semanticScore !== null) {
+      matchScore = skillScore * 0.65 + semanticScore * 0.20 + profileBonus * 100 * 0.15;
+    } else {
+      matchScore = skillScore * 0.80 + profileBonus * 100 * 0.20;
+    }
+  }
+
+  const connection = await pool.getConnection();
+  let applicationId;
+  try {
+    await connection.beginTransaction();
+
+    try {
+      const [result] = await connection.execute(
+        `INSERT INTO application
+          (student_user_id, internship_id, resume_id, submitted_resume_path,
+           submitted_resume_filename, cover_letter, match_score, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+        [
+          String(studentId),
+          String(internshipId),
+          String(resume.resume_id),
+          resume.file_path,
+          resume.original_filename,
+          coverLetter || null,
+          matchScore != null ? matchScore.toFixed(2) : null,
+        ]
+      );
+      applicationId = result.insertId;
+    } catch (err) {
+      if (err.code === 'ER_DUP_ENTRY') {
+        throw new AppError('You have already applied to this internship', 409);
+      }
+      throw err;
+    }
+
+    await connection.execute(
+      `INSERT INTO application_status_history
+        (application_id, old_status, new_status, changed_by_user_id)
+       VALUES (?, NULL, 'pending', ?)`,
+      [String(applicationId), String(studentId)]
+    );
+
+    await connection.execute(
+      `INSERT INTO notification
+        (user_id, type, title, message, reference_id, reference_type)
+       VALUES (?, 'new_application', ?, ?, ?, 'application')`,
+      [
+        String(internship.employer_user_id),
+        `New application for "${internship.title}"`,
+        `A student has applied to your internship "${internship.title}".`,
+        String(internshipId),
+      ]
+    );
+
+    await connection.commit();
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
 
   const io = req.app.get('io');
   if (io) {
@@ -1239,17 +1285,29 @@ const withdrawApplication = catchAsync(async (req, res) => {
     throw new AppError(`Cannot withdraw an application that is already ${app.status}`, 400);
   }
 
-  await pool.execute(
-    "UPDATE application SET status = 'withdrawn', status_updated_at = NOW() WHERE application_id = ?",
-    [String(id)]
-  );
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
 
-  await pool.execute(
-    `INSERT INTO application_status_history
-      (application_id, old_status, new_status, changed_by_user_id)
-     VALUES (?, ?, 'withdrawn', ?)`,
-    [String(id), app.status, String(studentId)]
-  );
+    await connection.execute(
+      "UPDATE application SET status = 'withdrawn', status_updated_at = NOW() WHERE application_id = ?",
+      [String(id)]
+    );
+
+    await connection.execute(
+      `INSERT INTO application_status_history
+        (application_id, old_status, new_status, changed_by_user_id)
+       VALUES (?, ?, 'withdrawn', ?)`,
+      [String(id), app.status, String(studentId)]
+    );
+
+    await connection.commit();
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
 
   res.json({ success: true, message: 'Application withdrawn' });
 });

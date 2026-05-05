@@ -139,6 +139,7 @@ const listInternships = catchAsync(async (req, res) => {
     if (req.user && req.user.role === 'student' && internships.length > 0) {
       const matchScope = req.query.match_scope === 'industry' ? 'industry' : 'all';
       await attachMatchScores(req.user.userId, internships, { scope: matchScope });
+      await attachApplicationState(req.user.userId, internships);
       if (sort === 'match') {
         internships.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
       }
@@ -186,7 +187,6 @@ const listInternships = catchAsync(async (req, res) => {
   } else {
     // Fallback: no embedding available (Gemini key missing)
     // Use SQL LIKE as fallback
-    const searchTerm = `%${searchQuery}%`;
     for (const intern of allInternships) {
       const titleMatch = (intern.title || '').toLowerCase().includes(searchQuery.toLowerCase());
       const descMatch = (intern.description || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -250,6 +250,7 @@ const listInternships = catchAsync(async (req, res) => {
 
   if (req.user && req.user.role === 'student' && paginated.length > 0) {
     await attachMatchScores(req.user.userId, paginated);
+    await attachApplicationState(req.user.userId, paginated);
     if (sort === 'match') {
       paginated.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
     }
@@ -558,7 +559,31 @@ function formatInternshipListItem(row) {
     },
     skills: row.skills || [],
     matchScore: row.matchScore ?? null,
+    hasApplied: row.hasApplied ?? false,
+    applicationStatus: row.applicationStatus ?? null,
   };
+}
+
+async function attachApplicationState(studentUserId, internships) {
+  if (internships.length === 0) return;
+  const ids = internships.map((i) => i.internship_id);
+  const placeholders = ids.map(() => '?').join(',');
+  const [rows] = await pool.execute(
+    `SELECT internship_id, status FROM application
+     WHERE student_user_id = ? AND internship_id IN (${placeholders})`,
+    [String(studentUserId), ...ids.map(String)]
+  );
+
+  const stateMap = {};
+  for (const r of rows) {
+    stateMap[r.internship_id] = r.status;
+  }
+
+  for (const intern of internships) {
+    const status = stateMap[intern.internship_id];
+    intern.hasApplied = !!status;
+    intern.applicationStatus = status || null;
+  }
 }
 
 /**

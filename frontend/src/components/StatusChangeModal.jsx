@@ -242,7 +242,7 @@ export default function StatusChangeModal({ applicant, onClose, onSubmit }) {
                       <p className="font-bold text-surface-900 dark:text-white">Are you sure?</p>
                       <p className="text-surface-600 dark:text-surface-300 mt-0.5">
                         {meta.tone === 'danger'
-                          ? 'This will reject the candidate and notify them. The status can still be reverted later.'
+                          ? 'This will reject the candidate and notify them. Rejected applications cannot be reopened.'
                           : 'This will mark the candidate as accepted and notify them.'}
                       </p>
                     </div>

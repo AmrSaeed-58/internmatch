@@ -209,9 +209,10 @@ function ApplicationModal({ internship, onClose, onApplied, studentProfile }) {
               onChange={(e) => setCoverLetter(e.target.value)}
               placeholder="Tell the employer why you're a great fit..."
               rows={5}
+              maxLength={5000}
               className="w-full px-3.5 py-3 rounded-2xl border border-surface-200 dark:border-surface-600 bg-surface-50 dark:bg-surface-700 text-surface-900 dark:text-surface-100 text-sm placeholder-surface-400 dark:placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-400 transition-colors resize-y"
             />
-            <p className="text-xs text-surface-400 dark:text-surface-500 mt-1">{coverLetter.length} / 1000 characters</p>
+            <p className="text-xs text-surface-400 dark:text-surface-500 mt-1">{coverLetter.length} / 5000 characters</p>
           </div>
 
           <div className="flex items-start gap-2.5 p-3.5 bg-surface-50 dark:bg-surface-700/30 rounded-2xl border border-surface-100 dark:border-surface-700">
@@ -469,7 +470,8 @@ export default function InternshipDetailPage() {
   // /login. Once signed in, the apply button reflects the real application
   // state. We only disable when the listing is closed/expired/already applied.
   const applyDisabled =
-    isStudent && (isExpired || internship.isActive === false || internship.hasApplied);
+    (user && !isStudent) ||
+    (isStudent && (isExpired || internship.isActive === false || internship.hasApplied));
   const applyLabel = !user
     ? 'Sign in to apply'
     : !isStudent

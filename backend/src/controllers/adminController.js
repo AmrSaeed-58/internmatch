@@ -8,14 +8,6 @@ const catchAsync = require('../utils/catchAsync');
 const BCRYPT_SALT_ROUNDS = 12;
 const uploadDir = process.env.UPLOAD_DIR || './uploads';
 
-const VALID_LOG_ACTIONS = [
-  'user_registered', 'user_login', 'user_logout', 'user_updated', 'user_deactivated',
-  'user_activated', 'user_deleted', 'password_changed', 'internship_created',
-  'internship_updated', 'internship_approved', 'internship_rejected', 'internship_closed',
-  'internship_deleted', 'application_submitted', 'application_status_changed',
-  'resume_uploaded', 'resume_deleted', 'profile_updated', 'report_generated',
-];
-
 const VALID_REPORT_TYPES = [
   'user_activity', 'internship_applications', 'student_match_ranking',
   'employer_performance', 'system_audit',
@@ -270,20 +262,24 @@ const deleteUser = catchAsync(async (req, res) => {
   if (!user) throw new AppError('User not found', 404);
   if (user.user_id === req.user.userId) throw new AppError('Cannot delete your own account', 400);
 
-  // Collect files to clean up
+  // Stored paths begin with `/uploads/...`. Strip that prefix before joining
+  // so we don't end up with `./uploads//uploads/...` and silently fail to
+  // remove the file.
+  const toLocalPath = (stored) => path.join(uploadDir, stored.replace(/^\/?uploads\//, ''));
+
   const filesToDelete = [];
-  if (user.profile_picture) filesToDelete.push(path.join(uploadDir, user.profile_picture));
+  if (user.profile_picture) filesToDelete.push(toLocalPath(user.profile_picture));
 
   if (user.role === 'student') {
     const [resumes] = await pool.query(
       'SELECT file_path FROM resume WHERE student_user_id = ?', [id]
     );
-    resumes.forEach((r) => filesToDelete.push(path.join(uploadDir, r.file_path)));
+    resumes.forEach((r) => filesToDelete.push(toLocalPath(r.file_path)));
   } else if (user.role === 'employer') {
     const [[emp]] = await pool.query(
       'SELECT company_logo FROM employer WHERE user_id = ?', [id]
     );
-    if (emp?.company_logo) filesToDelete.push(path.join(uploadDir, emp.company_logo));
+    if (emp?.company_logo) filesToDelete.push(toLocalPath(emp.company_logo));
   }
 
   // Cascade handled by DB FK ON DELETE CASCADE

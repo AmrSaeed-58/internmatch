@@ -33,7 +33,7 @@ const SORT_OPTIONS = [
   { value: 'status', label: 'Status' },
 ];
 
-const STATUS_FILTERS = ['all', 'pending', 'under_review', 'interview_scheduled', 'accepted', 'rejected'];
+const STATUS_FILTERS = ['all', 'pending', 'under_review', 'interview_scheduled', 'accepted', 'rejected', 'withdrawn'];
 
 function GraduationBadge({ status }) {
   const isGraduated = status === 'graduated';

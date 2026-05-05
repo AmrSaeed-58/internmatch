@@ -132,6 +132,8 @@ export default function StudentInternships() {
           skills: item.skills,
           relevanceScore: item.relevanceScore,
           relevanceLabel: item.relevanceLabel,
+          hasApplied: item.hasApplied,
+          applicationStatus: item.applicationStatus,
         };
       }));
       setTotalCount(pagination.total);
