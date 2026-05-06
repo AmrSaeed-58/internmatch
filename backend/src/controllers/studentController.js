@@ -10,6 +10,22 @@ const { findOrCreateSkill } = require('../utils/skillResolver');
 const BCRYPT_SALT_ROUNDS = 12;
 const uploadDir = process.env.UPLOAD_DIR || './uploads';
 
+function normalizeDateInput(value, fieldLabel) {
+  if (value === null || value === '') return null;
+
+  if (typeof value === 'string') {
+    const datePart = value.split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return datePart;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new AppError(`${fieldLabel} must be a valid date`, 400);
+  }
+
+  return parsed.toISOString().slice(0, 10);
+}
+
 const getProfile = catchAsync(async (req, res) => {
   const { userId } = req.user;
 
@@ -123,8 +139,11 @@ const updateProfile = catchAsync(async (req, res) => {
     for (const [jsKey, dbCol] of Object.entries(fieldMap)) {
       const value = req.body[jsKey];
       if (value !== undefined) {
+        const normalizedValue = ['universityStartDate', 'dateOfBirth'].includes(jsKey)
+          ? normalizeDateInput(value, jsKey === 'dateOfBirth' ? 'Date of birth' : 'University start date')
+          : value === '' ? null : value;
         studentFields.push(`${dbCol} = ?`);
-        studentValues.push(value === '' ? null : value);
+        studentValues.push(normalizedValue);
       }
     }
 
