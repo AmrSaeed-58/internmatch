@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, BrainCircuit, Sun, Moon } from 'lucide-react';
+import { ArrowLeft, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 // Shared chrome for static public pages (About, Privacy, Terms, Contact).
@@ -14,9 +14,7 @@ export default function LegalShell({ title, eyebrow, children }) {
       <header className="border-b border-surface-200/70 dark:border-surface-800/70 bg-white/70 dark:bg-dark-card/60 backdrop-blur-sm sticky top-0 z-30">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-600 to-accent-500 flex items-center justify-center shadow-glow-sm group-hover:scale-105 transition-transform duration-200">
-              <BrainCircuit size={18} className="text-white" />
-            </div>
+            <img src="/internmatch-logo.png" alt="" className="w-9 h-9 object-contain select-none group-hover:scale-105 transition-transform duration-200" draggable={false} />
             <span className="font-heading font-extrabold text-lg tracking-tight">InternMatch</span>
           </Link>
           <div className="flex items-center gap-2">

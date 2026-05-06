@@ -33,6 +33,7 @@ import { getInternship as fetchInternshipAPI } from '../../api/internships';
 import { useAuth } from '../../contexts/AuthContext';
 import * as studentAPI from '../../api/student';
 import * as messagesAPI from '../../api/messages';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 const PROF_ORDER = { beginner: 1, intermediate: 2, advanced: 3, expert: 4 };
 
@@ -91,22 +92,26 @@ function formatSalary(min, max) {
 }
 
 function CompanyMark({ name, logo, size = 64 }) {
-  if (logo) {
-    return (
-      <img
-        src={logo}
-        alt={name}
-        className="rounded-2xl object-contain bg-white ring-4 ring-white/20 shadow-elevated"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
+  const [broken, setBroken] = useState(false);
   const initials = (name || '??')
     .split(' ')
     .map((w) => w[0])
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  const resolved = resolveMediaUrl(logo);
+
+  if (resolved && !broken) {
+    return (
+      <img
+        src={resolved}
+        alt={name}
+        onError={() => setBroken(true)}
+        className="rounded-2xl object-contain bg-white ring-4 ring-white/20 shadow-elevated"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   return (
     <div
       className="rounded-2xl bg-white flex items-center justify-center font-heading font-bold text-primary-700 ring-4 ring-white/20 shadow-elevated"

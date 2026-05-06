@@ -26,6 +26,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import StatusBadge from '../../components/StatusBadge';
 import { useAuth } from '../../contexts/AuthContext';
 import * as employerAPI from '../../api/employer';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 function StatCard({ icon: Icon, label, value, sub, gradient, to }) {
   const Wrapper = to ? Link : 'div';
@@ -81,7 +82,7 @@ function CandidateCard({ candidate }) {
       <div className={`absolute -top-6 -right-6 w-20 h-20 rounded-full bg-gradient-to-br ${tone} opacity-10 group-hover:opacity-25 transition-opacity duration-300`} />
       <div className="relative flex items-center gap-3 mb-3">
         {candidate.profilePicture ? (
-          <img src={candidate.profilePicture} alt="" className="w-11 h-11 rounded-xl object-cover ring-2 ring-emerald-100 dark:ring-emerald-900/40" />
+          <img src={resolveMediaUrl(candidate.profilePicture)} alt="" className="w-11 h-11 rounded-xl object-cover ring-2 ring-emerald-100 dark:ring-emerald-900/40" />
         ) : (
           <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${tone} flex items-center justify-center text-white font-heading font-bold shadow-md`}>
             {(candidate.fullName || '?')[0]}

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  BrainCircuit,
   Mail,
   ArrowRight,
   ArrowLeft,
@@ -67,9 +66,7 @@ export default function ForgotPasswordPage() {
         to="/"
         className="flex items-center gap-2.5 mb-8 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 rounded-lg animate-fade-in-up relative z-10"
       >
-        <div className="w-10 h-10 rounded-xl bg-primary-600 flex items-center justify-center shadow-glow-sm">
-          <BrainCircuit size={20} className="text-white" />
-        </div>
+        <img src="/internmatch-logo.png" alt="" className="w-10 h-10 object-contain select-none" draggable={false} />
         <span className="font-heading font-bold text-xl text-surface-900 dark:text-white tracking-tight">
           Intern<span className="text-primary-600 dark:text-primary-400">Match</span>
         </span>

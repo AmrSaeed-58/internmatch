@@ -11,7 +11,6 @@ import {
   Settings,
   Menu,
   X,
-  BrainCircuit,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -19,6 +18,7 @@ import * as studentAPI from '../api/student';
 import * as employerAPI from '../api/employer';
 import * as adminAPI from '../api/admin';
 import * as messagesAPI from '../api/messages';
+import { resolveMediaUrl } from '../utils/mediaUrl';
 
 const ROLE_LABELS = {
   student: 'Student',
@@ -199,14 +199,18 @@ export default function Navbar({ onMenuToggle, mobileMenuOpen }) {
           {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
 
-        {/* Logo - bigger */}
+        {/* Logo */}
         <Link
           to={dashboardPath}
-          className="flex items-center gap-3 shrink-0 group"
+          className="flex items-center gap-2.5 shrink-0 group"
+          aria-label="InternMatch home"
         >
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-glow-sm group-hover:shadow-glow-md transition-shadow duration-200">
-            <BrainCircuit size={22} className="text-white" />
-          </div>
+          <img
+            src="/internmatch-logo.png"
+            alt=""
+            className="w-11 h-11 select-none object-contain"
+            draggable={false}
+          />
           <span className="font-heading font-bold text-xl tracking-tight text-surface-900 dark:text-white hidden sm:block">
             Intern<span className="text-primary-600 dark:text-primary-400">Match</span>
           </span>
@@ -327,7 +331,7 @@ export default function Navbar({ onMenuToggle, mobileMenuOpen }) {
             >
               {user?.profilePicture ? (
                 <img
-                  src={user.profilePicture}
+                  src={resolveMediaUrl(user.profilePicture)}
                   alt={user.fullName}
                   className="w-10 h-10 rounded-xl object-cover ring-2 ring-surface-200 dark:ring-surface-700"
                 />

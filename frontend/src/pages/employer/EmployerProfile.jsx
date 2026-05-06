@@ -20,6 +20,7 @@ import {
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';
 import * as employerAPI from '../../api/employer';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 const INDUSTRIES = [
   'Technology', 'Finance', 'Healthcare', 'Education', 'Engineering', 'Marketing', 'Other',
@@ -196,7 +197,7 @@ export default function EmployerProfile() {
               <div className="flex items-center gap-6">
                 <div className="relative">
                   {form.companyLogo ? (
-                    <img src={form.companyLogo} alt="Logo" className="w-24 h-24 rounded-2xl object-cover shadow-glow-sm" />
+                    <img src={resolveMediaUrl(form.companyLogo)} alt="Logo" className="w-24 h-24 rounded-2xl object-cover shadow-glow-sm" />
                   ) : (
                     <div className="w-24 h-24 rounded-2xl bg-primary-600 flex items-center justify-center text-white text-3xl font-bold shadow-glow-sm">
                       {form.companyName.charAt(0)}
@@ -345,7 +346,7 @@ export default function EmployerProfile() {
               </p>
               <div className="flex items-start gap-5 pb-6 border-b border-surface-100 dark:border-surface-700">
                 {form.companyLogo ? (
-                  <img src={form.companyLogo} alt="Logo" className="w-20 h-20 rounded-2xl object-cover shadow-glow-sm shrink-0" />
+                  <img src={resolveMediaUrl(form.companyLogo)} alt="Logo" className="w-20 h-20 rounded-2xl object-cover shadow-glow-sm shrink-0" />
                 ) : (
                   <div className="w-20 h-20 rounded-2xl bg-primary-600 flex items-center justify-center text-white text-3xl font-bold shadow-glow-sm shrink-0">
                     {form.companyName.charAt(0)}

@@ -137,12 +137,13 @@ function TopBar() {
         <div className="flex items-center justify-between h-20">
           {/* Logo - far left, bigger */}
           <Link to="/" className="flex items-center gap-3 group flex-shrink-0">
-            <motion.div
+            <motion.img
               whileHover={{ rotate: 10, scale: 1.1 }}
-              className="w-11 h-11 rounded-xl bg-primary-600 flex items-center justify-center shadow-glow-sm"
-            >
-              <BrainCircuit size={24} className="text-white" />
-            </motion.div>
+              src="/internmatch-logo.png"
+              alt=""
+              className="w-11 h-11 object-contain select-none"
+              draggable={false}
+            />
             <span className="font-heading font-bold text-xl text-surface-900 dark:text-white tracking-tight">
               Intern<span className="text-gradient-primary">Match</span>
             </span>
@@ -870,9 +871,7 @@ function Footer() {
           {/* Brand column */}
           <div className="lg:col-span-2">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-11 h-11 rounded-xl bg-primary-600 flex items-center justify-center">
-                <BrainCircuit size={24} className="text-white" />
-              </div>
+              <img src="/internmatch-logo.png" alt="" className="w-11 h-11 object-contain select-none" draggable={false} />
               <span className="font-heading font-bold text-2xl text-surface-900 dark:text-white">
                 Intern<span className="text-gradient-primary">Match</span>
               </span>

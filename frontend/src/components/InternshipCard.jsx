@@ -15,6 +15,7 @@ import {
   Loader2,
   Briefcase,
 } from 'lucide-react';
+import { resolveMediaUrl } from '../utils/mediaUrl';
 
 const WORK_TYPE_CONFIG = {
   remote: { label: 'Remote', icon: Wifi },
@@ -60,21 +61,25 @@ function scoreTone(score) {
 }
 
 function CompanyAvatar({ name, logo }) {
-  if (logo) {
-    return (
-      <img
-        src={logo}
-        alt={name}
-        className="w-14 h-14 rounded-2xl object-contain border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 shadow-card"
-      />
-    );
-  }
+  const [broken, setBroken] = useState(false);
   const initials = (name || '??')
     .split(' ')
     .map((w) => w[0])
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  const resolved = resolveMediaUrl(logo);
+
+  if (resolved && !broken) {
+    return (
+      <img
+        src={resolved}
+        alt={name}
+        onError={() => setBroken(true)}
+        className="w-14 h-14 rounded-2xl object-contain border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 shadow-card"
+      />
+    );
+  }
 
   return (
     <div className="w-14 h-14 rounded-2xl bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 flex items-center justify-center text-primary-700 dark:text-primary-300 text-sm font-heading font-bold shadow-card">

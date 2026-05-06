@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
-  BrainCircuit,
   Eye,
   EyeOff,
   Mail,
@@ -48,9 +47,7 @@ function BrandPanel() {
 
       {/* Logo */}
       <div className="relative flex items-center gap-2 animate-fade-in-up">
-        <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm shadow-glow-sm">
-          <BrainCircuit size={20} className="text-white" />
-        </div>
+        <img src="/internmatch-logo.png" alt="" className="w-10 h-10 object-contain select-none" draggable={false} />
         <span className="font-heading font-bold text-xl text-white tracking-tight">
           Intern<span className="text-primary-200">Match</span>
         </span>
@@ -161,9 +158,7 @@ export default function LoginPage() {
             <span className="text-sm font-semibold">Back</span>
           </Link>
           <Link to="/" className="lg:hidden flex items-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-lg">
-            <div className="w-9 h-9 rounded-xl bg-primary-600 flex items-center justify-center shadow-glow-sm">
-              <BrainCircuit size={17} className="text-white" />
-            </div>
+            <img src="/internmatch-logo.png" alt="" className="w-9 h-9 object-contain select-none" draggable={false} />
             <span className="font-heading font-bold text-lg text-surface-900 dark:text-white tracking-tight">
               Intern<span className="text-primary-600 dark:text-primary-400">Match</span>
             </span>

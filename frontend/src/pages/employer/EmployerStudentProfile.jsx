@@ -23,6 +23,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import StatusBadge from '../../components/StatusBadge';
 import MatchScoreBadge from '../../components/MatchScoreBadge';
 import * as employerAPI from '../../api/employer';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 import * as messagesAPI from '../../api/messages';
 import { downloadBlobFromResponse } from '../../utils/downloadFile';
 
@@ -160,7 +161,7 @@ export default function EmployerStudentProfile() {
             <div className="shrink-0">
               {profile.profilePicture ? (
                 <img
-                  src={profile.profilePicture.startsWith('http') ? profile.profilePicture : `${process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:5000'}${profile.profilePicture}`}
+                  src={resolveMediaUrl(profile.profilePicture)}
                   alt={profile.fullName}
                   className="w-24 h-24 md:w-28 md:h-28 rounded-2xl object-cover ring-4 ring-white/30 shadow-xl"
                 />

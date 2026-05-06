@@ -24,6 +24,7 @@ import {
 import DashboardLayout from '../../components/DashboardLayout';
 import EmptyState from '../../components/EmptyState';
 import * as studentAPI from '../../api/student';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 function ScoreRing({ score, size = 140, stroke = 10 }) {
   const pct = Math.max(0, Math.min(100, Math.round(score ?? 0)));
@@ -135,7 +136,7 @@ function FeaturedMatch({ rec }) {
           <div className="min-w-0">
             <div className="flex items-start gap-4 mb-5">
               {companyLogo ? (
-                <img src={companyLogo} alt={companyName} className="w-14 h-14 rounded-2xl object-cover ring-2 ring-white/30 shrink-0" />
+                <img src={resolveMediaUrl(companyLogo)} alt={companyName} className="w-14 h-14 rounded-2xl object-cover ring-2 ring-white/30 shrink-0" />
               ) : (
                 <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center shrink-0">
                   <Building2 size={24} className="text-white" />
@@ -258,7 +259,7 @@ function RankedRow({ rec, rank }) {
 
         {/* Logo */}
         {companyLogo ? (
-          <img src={companyLogo} alt={companyName} className="w-12 h-12 rounded-xl object-cover border border-surface-200 dark:border-surface-700 shrink-0" />
+          <img src={resolveMediaUrl(companyLogo)} alt={companyName} className="w-12 h-12 rounded-xl object-cover border border-surface-200 dark:border-surface-700 shrink-0" />
         ) : (
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shrink-0 shadow-sm">
             <Building2 size={20} className="text-white" />

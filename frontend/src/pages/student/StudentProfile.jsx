@@ -31,6 +31,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import * as studentAPI from '../../api/student';
 import { computeProfileStrength } from '../../utils/profileStrength';
 import { MAJORS, JORDAN_UNIVERSITIES } from '../../utils/academicData';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 const PROFICIENCY_LEVELS = ['beginner', 'intermediate', 'advanced'];
 
@@ -432,7 +433,7 @@ export default function StudentProfile() {
           <div className="relative shrink-0">
             {profile.profilePicture ? (
               <img
-                src={profile.profilePicture.startsWith('http') ? profile.profilePicture : `${process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:5000'}${profile.profilePicture}`}
+                src={resolveMediaUrl(profile.profilePicture)}
                 alt={profile.fullName}
                 className="w-24 h-24 rounded-2xl object-cover border-2 border-white/30 shadow-elevated"
               />
