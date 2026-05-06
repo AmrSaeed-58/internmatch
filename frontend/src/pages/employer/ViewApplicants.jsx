@@ -267,6 +267,7 @@ export default function ViewApplicants() {
 
                         <Link
                           to={`/employer/student/${applicant.studentUserId}`}
+                          state={{ internshipId: Number(id) }}
                           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 shadow-sm"
                         >
                           <User size={13} />

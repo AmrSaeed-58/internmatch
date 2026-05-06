@@ -18,7 +18,12 @@ export default function StudentSaved() {
     setLoading(true);
     try {
       const res = await studentAPI.getBookmarks({ limit: 50 });
-      setSaved(res.data.data || []);
+      setSaved((res.data.data || []).map((item) => ({
+        ...item,
+        companyName: item.companyName || item.employer?.companyName,
+        companyLogo: item.companyLogo || item.employer?.companyLogo,
+        industry: item.industry || item.employer?.industry,
+      })));
     } catch {
       setSaved([]);
     } finally {

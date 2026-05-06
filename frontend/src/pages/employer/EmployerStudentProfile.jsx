@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
   Mail,
@@ -46,6 +46,7 @@ function SkillPill({ skill }) {
 export default function EmployerStudentProfile() {
   const { studentId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -78,7 +79,11 @@ export default function EmployerStudentProfile() {
   async function handleMessage() {
     setOpening(true);
     try {
-      const res = await messagesAPI.createConversation({ otherUserId: Number(studentId) });
+      const internshipId = location.state?.internshipId || profile?.applications?.[0]?.internshipId;
+      const res = await messagesAPI.createConversation({
+        otherUserId: Number(studentId),
+        internshipId,
+      });
       const conversationId = res.data.data?.conversationId;
       navigate(conversationId ? `/employer/messages?conversation=${conversationId}` : '/employer/messages');
     } catch {

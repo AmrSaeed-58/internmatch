@@ -13,6 +13,9 @@ router.get('/stats', internshipController.getStats);
 router.get('/', optionalAuth, internshipController.listInternships);
 
 // GET /api/internships/:id       (optional auth — personalization + access rules)
+// GET /api/internships/employers/:id (optional auth - public company profile)
+router.get('/employers/:id', optionalAuth, internshipController.getEmployerProfile);
+
 router.get('/:id', optionalAuth, internshipController.getInternship);
 
 module.exports = router;

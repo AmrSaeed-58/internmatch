@@ -15,8 +15,6 @@ import {
   Shield,
   Palette,
   ChevronRight,
-  Languages,
-  UserCog,
   ArrowLeft,
   CheckCircle2,
 } from 'lucide-react';
@@ -30,8 +28,6 @@ const SECTIONS = [
   { id: 'account', title: 'Account & Security', description: 'Password and login', icon: Lock, color: 'from-primary-500 to-violet-600' },
   { id: 'notifications', title: 'Notifications', description: 'Email alerts', icon: Bell, color: 'from-accent-500 to-orange-500' },
   { id: 'appearance', title: 'Appearance', description: 'Theme and display', icon: Palette, color: 'from-fuchsia-500 to-pink-600' },
-  { id: 'language', title: 'Language & Region', description: 'Interface language', icon: Languages, color: 'from-blue-500 to-cyan-600' },
-  { id: 'privacy', title: 'Privacy', description: 'Profile visibility', icon: UserCog, color: 'from-teal-500 to-emerald-600' },
   { id: 'danger', title: 'Danger Zone', description: 'Delete account', icon: Shield, color: 'from-red-500 to-rose-600' },
 ];
 
@@ -40,7 +36,6 @@ const THEME_OPTIONS = [
   { value: 'dark', label: 'Dark', icon: Moon },
   { value: 'system', label: 'System', icon: Monitor },
 ];
-const LANGUAGE_OPTIONS = [{ value: 'en', label: 'English' }, { value: 'ar', label: 'العربية' }];
 
 function Toggle({ checked, onChange, label, description }) {
   return (
@@ -115,10 +110,6 @@ export default function StudentSettings() {
   const [notifPrefs, setNotifPrefs] = useState({
     applicationStatus: true, recommendations: true, messages: true, invitations: true,
   });
-  const [privacyPrefs, setPrivacyPrefs] = useState({
-    profileVisible: true, showEmail: false, allowInvitations: true,
-  });
-  const [language, setLanguage] = useState(() => localStorage.getItem('language') || 'en');
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
@@ -187,21 +178,6 @@ export default function StudentSettings() {
       setNotifPrefs((p) => ({ ...p, [key]: !newVal }));
       toast.error('Failed');
     }
-  }
-
-  function togglePrivacy(key) {
-    setPrivacyPrefs((p) => {
-      const next = { ...p, [key]: !p[key] };
-      localStorage.setItem('privacyPrefs', JSON.stringify(next));
-      return next;
-    });
-    toast.success('Saved');
-  }
-
-  function handleLanguageChange(value) {
-    setLanguage(value);
-    localStorage.setItem('language', value);
-    toast.success('Language saved');
   }
 
   const current = SECTIONS.find((s) => s.id === activeSection);
@@ -336,42 +312,6 @@ export default function StudentSettings() {
                       );
                     })}
                   </div>
-                </>
-              )}
-
-              {activeSection === 'language' && (
-                <>
-                  <PanelHeader icon={Languages} color={current.color} title="Language & Region" subtitle="Choose your preferred language" />
-                  <div className="grid grid-cols-2 gap-3 max-w-md">
-                    {LANGUAGE_OPTIONS.map(({ value, label }) => {
-                      const selected = language === value;
-                      return (
-                        <motion.button
-                          key={value}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.97 }}
-                          onClick={() => handleLanguageChange(value)}
-                          className={`relative py-5 rounded-2xl border-2 font-bold text-sm transition-all cursor-pointer ${
-                            selected
-                              ? 'border-primary-500 bg-gradient-to-br from-primary-50 to-accent-50/50 dark:from-primary-900/30 dark:to-accent-900/10 text-primary-700 dark:text-primary-300'
-                              : 'border-surface-200 dark:border-surface-700 text-surface-600 dark:text-surface-400 bg-white dark:bg-surface-900'
-                          }`}
-                        >
-                          {selected && <CheckCircle2 size={15} className="absolute top-2 right-2 text-primary-500" />}
-                          {label}
-                        </motion.button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-
-              {activeSection === 'privacy' && (
-                <>
-                  <PanelHeader icon={UserCog} color={current.color} title="Privacy" subtitle="Control who sees your profile" />
-                  <Toggle checked={privacyPrefs.profileVisible} onChange={() => togglePrivacy('profileVisible')} label="Public Profile" description="Allow employers to find your profile" />
-                  <Toggle checked={privacyPrefs.showEmail} onChange={() => togglePrivacy('showEmail')} label="Show Email to Employers" description="Display your email on your public profile" />
-                  <Toggle checked={privacyPrefs.allowInvitations} onChange={() => togglePrivacy('allowInvitations')} label="Allow Invitations" description="Let employers invite you to apply" />
                 </>
               )}
 

@@ -503,6 +503,68 @@ const getInternship = catchAsync(async (req, res) => {
   res.json({ success: true, data });
 });
 
+const getEmployerProfile = catchAsync(async (req, res) => {
+  const { id } = req.params;
+
+  const [rows] = await pool.execute(
+    `SELECT
+       u.user_id, u.full_name, u.email,
+       e.company_name, e.industry, e.company_size, e.company_description,
+       e.company_logo, e.website_url, e.linkedin_url, e.twitter_url,
+       e.facebook_url, e.instagram_url, e.location
+     FROM users u
+     JOIN employer e ON e.user_id = u.user_id
+     WHERE u.user_id = ? AND u.role = 'employer' AND u.is_active = 1`,
+    [String(id)]
+  );
+
+  if (rows.length === 0) throw new AppError('Employer profile not found', 404);
+
+  const [internships] = await pool.execute(
+    `SELECT
+       i.internship_id, i.title, i.description, i.location,
+       i.duration_months, i.work_type, i.salary_min, i.salary_max,
+       i.deadline, i.created_at,
+       e.company_name, e.company_logo, e.industry, e.user_id AS employer_user_id
+     FROM internship i
+     JOIN employer e ON e.user_id = i.employer_user_id
+     WHERE i.employer_user_id = ?
+       AND i.status = 'active'
+       AND (i.deadline IS NULL OR i.deadline >= CURDATE())
+     ORDER BY i.created_at DESC
+     LIMIT 12`,
+    [String(id)]
+  );
+
+  await attachSkillsToList(internships);
+  if (req.user && req.user.role === 'student') {
+    await attachMatchScores(req.user.userId, internships, { scope: 'all' });
+    await attachApplicationState(req.user.userId, internships);
+  }
+
+  const e = rows[0];
+  res.json({
+    success: true,
+    data: {
+      userId: e.user_id,
+      contactName: e.full_name,
+      email: e.email,
+      companyName: e.company_name,
+      industry: e.industry,
+      companySize: e.company_size,
+      companyDescription: e.company_description,
+      companyLogo: e.company_logo,
+      websiteUrl: e.website_url,
+      linkedinUrl: e.linkedin_url,
+      twitterUrl: e.twitter_url,
+      facebookUrl: e.facebook_url,
+      instagramUrl: e.instagram_url,
+      location: e.location,
+      internships: internships.map(formatInternshipListItem),
+    },
+  });
+});
+
 /**
  * Attach required skills to a list of internship rows (batch load).
  */
@@ -561,6 +623,7 @@ function formatInternshipListItem(row) {
     matchScore: row.matchScore ?? null,
     hasApplied: row.hasApplied ?? false,
     applicationStatus: row.applicationStatus ?? null,
+    isBookmarked: row.isBookmarked ?? false,
   };
 }
 
@@ -583,6 +646,17 @@ async function attachApplicationState(studentUserId, internships) {
     const status = stateMap[intern.internship_id];
     intern.hasApplied = !!status;
     intern.applicationStatus = status || null;
+  }
+
+  const [bookmarkRows] = await pool.execute(
+    `SELECT internship_id FROM bookmark
+     WHERE student_user_id = ? AND internship_id IN (${placeholders})`,
+    [String(studentUserId), ...ids.map(String)]
+  );
+  const bookmarked = new Set(bookmarkRows.map((r) => r.internship_id));
+
+  for (const intern of internships) {
+    intern.isBookmarked = bookmarked.has(intern.internship_id);
   }
 }
 
@@ -825,6 +899,7 @@ module.exports = {
   getFeatured,
   getStats,
   getInternship,
+  getEmployerProfile,
   // Shared scoring helpers (used by studentController for recommendations)
   computeSkillScore,
   computeProfileBonus,

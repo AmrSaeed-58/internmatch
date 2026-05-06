@@ -17,6 +17,7 @@ import {
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import * as employerAPI from '../../api/employer';
 
 const TABS = [
@@ -55,6 +56,7 @@ function Toggle({ checked, onChange }) {
 
 export default function EmployerSettings() {
   const { user, logout } = useAuth();
+  const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('password');
 
@@ -70,9 +72,6 @@ export default function EmployerSettings() {
     emailInternshipApproved: true,
     emailNewMessage: true,
   });
-
-  // Theme
-  const [theme, setTheme] = useState('system');
 
   // Delete modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);

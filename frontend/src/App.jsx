@@ -26,6 +26,7 @@ import {
   StudentMessages,
   StudentSettings,
   StudentNotifications,
+  StudentEmployerProfile,
 } from './pages/student';
 import {
   AdminDashboard,
@@ -128,6 +129,9 @@ function AppRoutes() {
       } />
       <Route path="/student/settings" element={
         <ProtectedRoute allowedRoles={['student']}><StudentSettings /></ProtectedRoute>
+      } />
+      <Route path="/student/employer/:employerId" element={
+        <ProtectedRoute allowedRoles={['student']}><StudentEmployerProfile /></ProtectedRoute>
       } />
 
       {/* Employer Routes */}

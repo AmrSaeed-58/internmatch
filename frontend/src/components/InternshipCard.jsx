@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   MapPin,
@@ -98,6 +98,10 @@ export default function InternshipCard({
   calculating = false,
 }) {
   const [bookmarked, setBookmarked] = useState(initialBookmarked);
+
+  useEffect(() => {
+    setBookmarked(initialBookmarked);
+  }, [initialBookmarked]);
 
   if (!internship) return null;
 

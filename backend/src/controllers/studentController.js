@@ -805,8 +805,29 @@ const deleteAccount = catchAsync(async (req, res) => {
     [userId]
   );
 
-  // Delete user (cascades to student, resume, has_skill, applications, etc.)
-  await pool.execute('DELETE FROM users WHERE user_id = ?', [userId]);
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // Applications reference the student's resume with ON DELETE RESTRICT.
+    // Delete them first, then clear the circular student -> primary resume FK.
+    await connection.execute(
+      'DELETE FROM application WHERE student_user_id = ?',
+      [String(userId)]
+    );
+    await connection.execute(
+      'UPDATE student SET primary_resume_id = NULL WHERE user_id = ?',
+      [String(userId)]
+    );
+    await connection.execute('DELETE FROM users WHERE user_id = ?', [String(userId)]);
+
+    await connection.commit();
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
 
   // Best-effort file cleanup
   if (rows[0].profile_picture) {

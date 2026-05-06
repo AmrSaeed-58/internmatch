@@ -14,6 +14,9 @@ export const getInternships = (params = {}) =>
 export const getInternship = (id) =>
   API.get(`/internships/${id}`);
 
+export const getEmployerProfile = (id) =>
+  API.get(`/internships/employers/${id}`);
+
 /**
  * Get featured internships for landing page.
  */

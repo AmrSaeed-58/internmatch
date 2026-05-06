@@ -7,3 +7,4 @@ export { default as StudentSaved } from './StudentSaved';
 export { default as StudentMessages } from './StudentMessages';
 export { default as StudentSettings } from './StudentSettings';
 export { default as StudentNotifications } from './StudentNotifications';
+export { default as StudentEmployerProfile } from './StudentEmployerProfile';

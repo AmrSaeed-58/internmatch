@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';
+import { useAuth } from '../../contexts/AuthContext';
 import * as employerAPI from '../../api/employer';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 
@@ -45,6 +46,7 @@ function SectionCard({ icon: Icon, gradient, title, children }) {
 }
 
 export default function EmployerProfile() {
+  const { updateUser } = useAuth();
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -112,6 +114,11 @@ export default function EmployerProfile() {
         facebookUrl: form.facebookUrl || null,
         instagramUrl: form.instagramUrl || null,
       });
+      updateUser({
+        fullName: form.contactName,
+        companyName: form.companyName,
+        companyLogo: form.companyLogo,
+      });
       toast.success('Profile saved successfully');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to save profile');
@@ -125,7 +132,9 @@ export default function EmployerProfile() {
     if (!file) return;
     try {
       const res = await employerAPI.uploadCompanyLogo(file);
-      setForm((prev) => ({ ...prev, companyLogo: res.data.data.companyLogo }));
+      const companyLogo = res.data.data.companyLogo;
+      setForm((prev) => ({ ...prev, companyLogo }));
+      updateUser({ companyLogo });
       toast.success('Logo updated');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to upload logo');

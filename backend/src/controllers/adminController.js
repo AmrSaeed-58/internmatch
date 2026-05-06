@@ -282,14 +282,28 @@ const deleteUser = catchAsync(async (req, res) => {
     if (emp?.company_logo) filesToDelete.push(toLocalPath(emp.company_logo));
   }
 
-  // Cascade handled by DB FK ON DELETE CASCADE
-  await pool.query('DELETE FROM users WHERE user_id = ?', [id]);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
 
-  // Log
-  await pool.query(
-    'INSERT INTO system_log (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)',
-    [req.user.userId, 'user_deleted', `Admin deleted user ${id} (role: ${user.role})`, req.ip]
-  );
+    if (user.role === 'student') {
+      await conn.query('DELETE FROM application WHERE student_user_id = ?', [id]);
+      await conn.query('UPDATE student SET primary_resume_id = NULL WHERE user_id = ?', [id]);
+    }
+
+    await conn.query('DELETE FROM users WHERE user_id = ?', [id]);
+    await conn.query(
+      'INSERT INTO system_log (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)',
+      [req.user.userId, 'user_deleted', `Admin deleted user ${id} (role: ${user.role})`, req.ip]
+    );
+
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 
   // Best-effort file cleanup
   for (const filePath of filesToDelete) {

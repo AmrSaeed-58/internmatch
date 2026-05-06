@@ -14,6 +14,7 @@ import {
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import * as adminAPI from '../../api/admin';
 
 function SectionCard({ icon: Icon, title, gradient, children }) {
@@ -58,6 +59,7 @@ function InputField({ label, type = 'text', value, onChange, rightElement, place
 export default function AdminSettings() {
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { theme, setTheme } = useTheme();
 
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -67,25 +69,6 @@ export default function AdminSettings() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [pwError, setPwError] = useState('');
   const [pwLoading, setPwLoading] = useState(false);
-
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'system');
-
-  function applyTheme(value) {
-    setTheme(value);
-    localStorage.setItem('theme', value);
-    const root = document.documentElement;
-    if (value === 'dark') {
-      root.classList.add('dark');
-    } else if (value === 'light') {
-      root.classList.remove('dark');
-    } else {
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        root.classList.add('dark');
-      } else {
-        root.classList.remove('dark');
-      }
-    }
-  }
 
   async function handlePasswordChange(e) {
     e.preventDefault();
@@ -205,7 +188,7 @@ export default function AdminSettings() {
               <motion.button
                 key={value}
                 
-                onClick={() => applyTheme(value)}
+                onClick={() => setTheme(value)}
                 className={`flex flex-col items-center gap-2.5 py-4 rounded-xl border-2 transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
                   theme === value
                     ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-500 dark:border-primary-400 shadow-glow-sm'

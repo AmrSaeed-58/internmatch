@@ -17,10 +17,12 @@ import {
   DollarSign,
   Clock,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';
 import InternshipCard from '../../components/InternshipCard';
 import EmptyState from '../../components/EmptyState';
 import * as internshipsAPI from '../../api/internships';
+import * as studentAPI from '../../api/student';
 import { useAuth } from '../../contexts/AuthContext';
 import { getCachedScore, saveCachedScore } from '../../utils/calculatedScores';
 
@@ -134,6 +136,7 @@ export default function StudentInternships() {
           relevanceLabel: item.relevanceLabel,
           hasApplied: item.hasApplied,
           applicationStatus: item.applicationStatus,
+          isBookmarked: item.isBookmarked,
         };
       }));
       setTotalCount(pagination.total);
@@ -180,6 +183,26 @@ export default function StudentInternships() {
       /* ignore */
     } finally {
       setCalculatingId(null);
+    }
+  }
+
+  async function handleBookmarkToggle(internshipId, isBookmarked) {
+    setInternships((prev) => prev.map((item) =>
+      item.internshipId === internshipId ? { ...item, isBookmarked } : item
+    ));
+    try {
+      if (isBookmarked) {
+        await studentAPI.addBookmark(internshipId);
+        toast.success('Saved to bookmarks');
+      } else {
+        await studentAPI.removeBookmark(internshipId);
+        toast.success('Removed from saved');
+      }
+    } catch (err) {
+      setInternships((prev) => prev.map((item) =>
+        item.internshipId === internshipId ? { ...item, isBookmarked: !isBookmarked } : item
+      ));
+      toast.error(err.response?.data?.message || 'Could not update saved internships');
     }
   }
 
@@ -425,6 +448,8 @@ export default function StudentInternships() {
                 key={internship.internshipId}
                 internship={internship}
                 showMatchScore
+                bookmarked={internship.isBookmarked}
+                onBookmarkToggle={handleBookmarkToggle}
                 onCalculateMatch={handleCalculateMatch}
                 calculating={calculatingId === internship.internshipId}
               />

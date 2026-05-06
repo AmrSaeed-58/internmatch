@@ -20,6 +20,11 @@ function authReducer(state, action) {
       };
     case 'AUTH_LOADED':
       return { ...state, user: action.payload, loading: false };
+    case 'AUTH_UPDATE_USER':
+      return {
+        ...state,
+        user: state.user ? { ...state.user, ...action.payload } : state.user,
+      };
     case 'AUTH_LOGOUT':
       return { ...state, user: null, token: null, loading: false };
     case 'AUTH_ERROR':
@@ -55,6 +60,16 @@ export function AuthProvider({ children }) {
     dispatch({ type: 'AUTH_SUCCESS', payload: { token, user } });
   };
 
+  const updateUser = (patch) => {
+    dispatch({ type: 'AUTH_UPDATE_USER', payload: patch });
+  };
+
+  const refreshUser = async () => {
+    const res = await API.get('/auth/me');
+    dispatch({ type: 'AUTH_LOADED', payload: res.data.data });
+    return res.data.data;
+  };
+
   const logout = async () => {
     try {
       await API.post('/auth/logout');
@@ -66,7 +81,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout }}>
+    <AuthContext.Provider value={{ ...state, login, logout, updateUser, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

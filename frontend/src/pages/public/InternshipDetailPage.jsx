@@ -396,19 +396,20 @@ export default function InternshipDetailPage() {
       navigate('/login', { state: { message: 'Sign in as a student to save internships.' } });
       return;
     }
+    const nextBookmarked = !bookmarked;
+    setBookmarked(nextBookmarked);
     try {
       const { addBookmark, removeBookmark } = await import('../../api/student');
-      if (bookmarked) {
+      if (!nextBookmarked) {
         await removeBookmark(internship.internshipId);
         toast.success('Removed from saved');
       } else {
         await addBookmark(internship.internshipId);
         toast.success('Saved to bookmarks');
       }
-      setBookmarked((p) => !p);
-    } catch {
-      setBookmarked((p) => !p);
-      toast.success(bookmarked ? 'Removed from saved' : 'Saved to bookmarks');
+    } catch (err) {
+      setBookmarked(!nextBookmarked);
+      toast.error(err.response?.data?.message || 'Could not update saved internships');
     }
   }
 
@@ -784,9 +785,19 @@ export default function InternshipDetailPage() {
                   <div className="w-10 h-10 rounded-2xl bg-surface-100 dark:bg-surface-800 text-surface-700 dark:text-surface-300 flex items-center justify-center ring-1 ring-surface-200 dark:ring-surface-700">
                     <Building2 size={16} />
                   </div>
-                  <h2 className="font-heading font-bold text-surface-900 dark:text-white text-lg tracking-tight">
-                    About {internship.companyName}
-                  </h2>
+                  <div className="min-w-0">
+                    <h2 className="font-heading font-bold text-surface-900 dark:text-white text-lg tracking-tight">
+                      About {internship.companyName}
+                    </h2>
+                    {isStudent && internship.employer?.userId && (
+                      <Link
+                        to={`/student/employer/${internship.employer.userId}`}
+                        className="text-xs font-bold text-primary-600 dark:text-primary-400 hover:underline"
+                      >
+                        View company profile
+                      </Link>
+                    )}
+                  </div>
                 </div>
                 <p className="text-sm text-surface-600 dark:text-surface-400 leading-relaxed whitespace-pre-wrap mb-4">
                   {internship.companyDescription || `A leading company in the ${internship.industry || 'technology'} sector, committed to developing the next generation of talent.`}
