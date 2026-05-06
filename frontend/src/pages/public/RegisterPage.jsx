@@ -28,7 +28,8 @@ const COMPANY_SIZE_OPTIONS = [
   '500+',
 ];
 
-const GRADUATION_YEARS = Array.from({ length: 8 }, (_, i) => new Date().getFullYear() + i - 1);
+const CURRENT_YEAR = new Date().getFullYear();
+const GRADUATION_YEARS = Array.from({ length: 16 }, (_, i) => CURRENT_YEAR - 5 + i);
 
 const GENDER_OPTIONS = ['Male', 'Female'];
 

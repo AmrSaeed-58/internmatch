@@ -399,7 +399,7 @@ export default function UserManagement() {
               {/* Pagination */}
               <div className="flex items-center justify-between px-5 py-3.5 border-t border-surface-100 dark:border-surface-700">
                 <p className="text-xs text-surface-400 dark:text-surface-500 font-medium">
-                  Showing {((page - 1) * PAGE_SIZE) + 1}--{Math.min(page * PAGE_SIZE, total)} of {total}
+                  {total === 0 ? 'No users' : `Showing ${((page - 1) * PAGE_SIZE) + 1}-${Math.min(page * PAGE_SIZE, total)} of ${total}`}
                 </p>
                 <div className="flex items-center gap-1.5">
                   <PaginationBtn icon={ChevronLeft}  disabled={page === 1}          onClick={() => setPage((p) => p - 1)} />

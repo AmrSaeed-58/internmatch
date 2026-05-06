@@ -85,9 +85,9 @@ function formatDate(dateStr) {
 }
 
 function formatSalary(min, max) {
-  if (!min && !max) return null;
-  if (min && max) return `$${min}–$${max}/mo`;
-  if (min) return `From $${min}/mo`;
+  if (min == null && max == null) return null;
+  if (min != null && max != null) return `$${min}-$${max}/mo`;
+  if (min != null) return `From $${min}/mo`;
   return `Up to $${max}/mo`;
 }
 

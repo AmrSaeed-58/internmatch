@@ -85,6 +85,12 @@ export default function StudentInternships() {
     return () => clearTimeout(timer);
   }, [query]);
 
+  const [debouncedLocationFilter, setDebouncedLocationFilter] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedLocationFilter(locationFilter), 300);
+    return () => clearTimeout(timer);
+  }, [locationFilter]);
+
   const fetchInternships = useCallback(async () => {
     setLoading(true);
     try {
@@ -96,7 +102,7 @@ export default function StudentInternships() {
       };
       if (debouncedQuery.trim()) params.q = debouncedQuery.trim();
       if (workType) params.work_type = workType;
-      if (locationFilter.trim()) params.location = locationFilter.trim();
+      if (debouncedLocationFilter.trim()) params.location = debouncedLocationFilter.trim();
       if (industryFilter) params.industry = industryFilter;
       if (durationRange) {
         const [min, max] = durationRange.split('-');
@@ -141,14 +147,15 @@ export default function StudentInternships() {
       }));
       setTotalCount(pagination.total);
       setTotalPages(pagination.totalPages);
-    } catch {
+    } catch (err) {
       setInternships([]);
       setTotalCount(0);
       setTotalPages(1);
+      toast.error(err.response?.data?.message || 'Could not search internships right now');
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedQuery, workType, locationFilter, industryFilter, durationRange, paidOnly, sortBy, studentUserId]);
+  }, [page, debouncedQuery, workType, debouncedLocationFilter, industryFilter, durationRange, paidOnly, sortBy, studentUserId]);
 
   useEffect(() => {
     fetchInternships();

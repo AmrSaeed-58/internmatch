@@ -29,6 +29,17 @@ function cosineSimilarity(a, b) {
   return denom === 0 ? 0 : dot / denom;
 }
 
+function parseEmbedding(value) {
+  if (!value) return null;
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (err) {
+    console.error('[embeddingService] invalid stored embedding:', err.message);
+    return null;
+  }
+}
+
 async function buildStudentText(studentUserId) {
   const [rows] = await pool.execute(
     `SELECT s.bio, s.university, s.major, s.graduation_year, s.gpa,
@@ -64,10 +75,8 @@ async function buildStudentText(studentUserId) {
 
 async function buildInternshipText(internshipId) {
   const [rows] = await pool.execute(
-    `SELECT i.title, i.description, i.location, i.work_type,
-            e.company_name, e.industry
+    `SELECT i.title, i.description
      FROM internship i
-     JOIN employer e ON e.user_id = i.employer_user_id
      WHERE i.internship_id = ?`,
     [String(internshipId)]
   );
@@ -83,11 +92,7 @@ async function buildInternshipText(internshipId) {
 
   const parts = [
     i.title,
-    i.company_name && `Company: ${i.company_name}`,
-    i.industry && `Industry: ${i.industry}`,
     i.description,
-    i.location && `Location: ${i.location}`,
-    i.work_type && `Work type: ${i.work_type}`,
     skills.length > 0 && `Required skills: ${skills.map((s) => `${s.display_name} (${s.required_level}, ${s.is_mandatory ? 'mandatory' : 'optional'})`).join(', ')}`,
   ];
 
@@ -161,8 +166,7 @@ async function getStudentEmbedding(studentUserId) {
     [String(studentUserId)]
   );
   if (rows.length === 0) return null;
-  const parsed = typeof rows[0].embedding === 'string' ? JSON.parse(rows[0].embedding) : rows[0].embedding;
-  return parsed;
+  return parseEmbedding(rows[0].embedding);
 }
 
 async function getInternshipEmbedding(internshipId) {
@@ -171,8 +175,7 @@ async function getInternshipEmbedding(internshipId) {
     [String(internshipId)]
   );
   if (rows.length === 0) return null;
-  const parsed = typeof rows[0].embedding === 'string' ? JSON.parse(rows[0].embedding) : rows[0].embedding;
-  return parsed;
+  return parseEmbedding(rows[0].embedding);
 }
 
 async function computeSemanticScore(studentUserId, internshipId) {

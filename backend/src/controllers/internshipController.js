@@ -13,6 +13,188 @@ const VISIBILITY_WHERE = `
   AND (i.deadline IS NULL OR i.deadline >= CURDATE())
 `;
 
+const SEARCH_STOP_WORDS = new Set([
+  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'for', 'from', 'i', 'in', 'intern',
+  'internship', 'internships', 'is', 'job', 'jobs', 'me', 'of', 'on', 'or', 'role',
+  'roles', 'the', 'to', 'with',
+]);
+
+const SEARCH_TOKEN_ALIASES = {
+  website: 'web',
+  websites: 'web',
+  webpage: 'web',
+  webpages: 'web',
+  site: 'web',
+  sites: 'web',
+  frontend: 'frontend',
+  front: 'frontend',
+  ui: 'frontend',
+  interface: 'frontend',
+  interfaces: 'frontend',
+  building: 'build',
+  build: 'build',
+  builds: 'build',
+  built: 'build',
+  creating: 'build',
+  create: 'build',
+  creates: 'build',
+  developing: 'develop',
+  develop: 'develop',
+  develops: 'develop',
+  developed: 'develop',
+};
+
+function normalizeSearchText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9+#.\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeSearchToken(token) {
+  return SEARCH_TOKEN_ALIASES[token] || token;
+}
+
+function tokenizeSearchQuery(query) {
+  const normalized = normalizeSearchText(query);
+  const tokens = normalized
+    .split(' ')
+    .map((token) => token.trim())
+    .map(normalizeSearchToken)
+    .filter((token) => token.length > 1 && !SEARCH_STOP_WORDS.has(token));
+  const uniqueTokens = [...new Set(tokens)];
+
+  return {
+    normalized: uniqueTokens.join(' '),
+    tokens: uniqueTokens,
+  };
+}
+
+function scoreField(value, tokens, normalizedQuery) {
+  const text = normalizeSearchText(value)
+    .split(' ')
+    .map(normalizeSearchToken)
+    .join(' ');
+  if (!text) return 0;
+
+  let score = 0;
+  if (normalizedQuery && text.includes(normalizedQuery)) {
+    score += 0.65;
+  }
+
+  if (tokens.length > 0) {
+    const matched = tokens.filter((token) => text.includes(token)).length;
+    score += (matched / tokens.length) * 0.35;
+  }
+
+  return Math.min(1, score);
+}
+
+function scoreLexicalRelevance(internship, queryParts) {
+  const { normalized, tokens } = queryParts;
+  const weightedScore =
+    scoreField(internship.title, tokens, normalized) * 0.42 +
+    scoreField(internship.skill_names, tokens, normalized) * 0.34 +
+    scoreField(internship.description, tokens, normalized) * 0.24;
+
+  return Math.min(1, weightedScore);
+}
+
+function fieldHasSearchTerm(value, queryParts) {
+  const text = normalizeSearchText(value)
+    .split(' ')
+    .map(normalizeSearchToken)
+    .join(' ');
+  if (!text || queryParts.tokens.length === 0) return false;
+  if (queryParts.normalized && text.includes(queryParts.normalized)) return true;
+  return queryParts.tokens.some((token) => text.includes(token));
+}
+
+function hasDirectSearchMatch(internship, queryParts) {
+  if (queryParts.tokens.length === 0) return false;
+
+  if (
+    fieldHasSearchTerm(internship.title, queryParts) ||
+    fieldHasSearchTerm(internship.skill_names, queryParts)
+  ) {
+    return true;
+  }
+
+  const description = normalizeSearchText(internship.description)
+    .split(' ')
+    .map(normalizeSearchToken)
+    .join(' ');
+  if (!description) return false;
+  const matchedDescriptionTokens = queryParts.tokens.filter((token) => description.includes(token)).length;
+  return matchedDescriptionTokens >= Math.max(1, Math.ceil(queryParts.tokens.length * 0.6));
+}
+
+function parseEmbeddingValue(value) {
+  if (!value) return null;
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeSemanticSimilarity(similarity) {
+  if (!Number.isFinite(similarity)) return 0;
+  return Math.max(0, Math.min(1, (similarity - 0.62) / 0.22));
+}
+
+function compareDatesDesc(a, b) {
+  return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+}
+
+function compareSearchResults(sort) {
+  return (a, b) => {
+    if (sort === 'deadline') {
+      const deadlineA = a.deadline ? new Date(a.deadline).getTime() : Number.MAX_SAFE_INTEGER;
+      const deadlineB = b.deadline ? new Date(b.deadline).getTime() : Number.MAX_SAFE_INTEGER;
+      return deadlineA - deadlineB || b.relevanceScore - a.relevanceScore || compareDatesDesc(a, b);
+    }
+
+    if (sort === 'salary') {
+      return (Number(b.salary_max) || 0) - (Number(a.salary_max) || 0)
+        || b.relevanceScore - a.relevanceScore
+        || compareDatesDesc(a, b);
+    }
+
+    if (sort === 'match') {
+      return (b.matchScore || 0) - (a.matchScore || 0)
+        || b.relevanceScore - a.relevanceScore
+        || compareDatesDesc(a, b);
+    }
+
+    if (sort === 'oldest') {
+      return new Date(a.created_at || 0) - new Date(b.created_at || 0)
+        || b.relevanceScore - a.relevanceScore;
+    }
+
+    return b.relevanceScore - a.relevanceScore || compareDatesDesc(a, b);
+  };
+}
+
+function assignRelevanceLabel(internship) {
+  if (internship.relevanceScore >= 0.75) {
+    internship.relevanceLabel = 'Highly Relevant';
+  } else if (internship.relevanceScore >= 0.45) {
+    internship.relevanceLabel = 'Relevant';
+  } else {
+    internship.relevanceLabel = 'Related';
+  }
+}
+
+function queueMissingInternshipEmbeddings(internshipIds) {
+  if (!process.env.GEMINI_API_KEY || internshipIds.length === 0) return;
+  for (const internshipId of internshipIds.slice(0, 25)) {
+    embeddingService.updateInternshipEmbedding(internshipId).catch(() => {});
+  }
+}
+
 const listInternships = catchAsync(async (req, res) => {
   const {
     page = 1,
@@ -81,12 +263,9 @@ const listInternships = catchAsync(async (req, res) => {
   }
 
   const searchQuery = q && q.trim() ? q.trim() : null;
-  const useSemanticSearch = !!searchQuery;
+  const useSearch = !!searchQuery;
 
-  // For short queries (< 3 words), also run SQL LIKE fallback
-  const isShortQuery = searchQuery && searchQuery.split(/\s+/).length < 3;
-
-  if (!useSemanticSearch) {
+  if (!useSearch) {
     // No search query — traditional listing with filters
     const whereSQL = whereClauses.join(' AND ');
 
@@ -99,7 +278,7 @@ const listInternships = catchAsync(async (req, res) => {
         orderSQL = 'i.salary_max DESC, i.created_at DESC';
         break;
       case 'match':
-        orderSQL = 'i.created_at DESC'; // match sort handled post-query
+        orderSQL = 'i.created_at DESC';
         break;
       case 'oldest':
         orderSQL = 'i.created_at ASC';
@@ -108,6 +287,36 @@ const listInternships = catchAsync(async (req, res) => {
       default:
         orderSQL = 'i.created_at DESC';
         break;
+    }
+
+    if (sort === 'match' && req.user && req.user.role === 'student') {
+      const allSQL = `
+        SELECT
+          i.internship_id, i.title, i.description, i.location,
+          i.duration_months, i.work_type, i.salary_min, i.salary_max,
+          i.deadline, i.created_at,
+          e.company_name, e.company_logo, e.industry, e.user_id AS employer_user_id
+        FROM internship i
+        ${VISIBILITY_JOIN}
+        WHERE ${whereSQL}
+      `;
+      const [allInternships] = await pool.execute(allSQL, params);
+      await attachSkillsToList(allInternships);
+
+      const matchScope = req.query.match_scope === 'industry' ? 'industry' : 'all';
+      await attachMatchScores(req.user.userId, allInternships, { scope: matchScope });
+      allInternships.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0) || compareDatesDesc(a, b));
+
+      const total = allInternships.length;
+      const paginated = allInternships.slice(offset, offset + limitNum);
+      queueMissingInternshipEmbeddings(paginated.map((intern) => intern.internship_id));
+      await attachApplicationState(req.user.userId, paginated);
+
+      return res.json({
+        success: true,
+        data: paginated.map(formatInternshipListItem),
+        pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) },
+      });
     }
 
     const countSQL = `
@@ -133,6 +342,7 @@ const listInternships = catchAsync(async (req, res) => {
     `;
     const dataParams = [...params, String(limitNum), String(offset)];
     const [internships] = await pool.execute(dataSQL, dataParams);
+    queueMissingInternshipEmbeddings(internships.map((intern) => intern.internship_id));
 
     await attachSkillsToList(internships);
 
@@ -152,10 +362,11 @@ const listInternships = catchAsync(async (req, res) => {
     });
   }
 
-  // Step 1: Generate query embedding
-  const queryEmbedding = await embeddingService.generateEmbedding(searchQuery);
+  const queryParts = tokenizeSearchQuery(searchQuery);
+  const queryEmbedding = queryParts.tokens.length > 0
+    ? await embeddingService.generateEmbedding(queryParts.normalized)
+    : null;
 
-  // Step 2: Load all visible internship embeddings
   const filterWhereSQL = whereClauses.join(' AND ');
   const allSQL = `
     SELECT
@@ -163,108 +374,77 @@ const listInternships = catchAsync(async (req, res) => {
       i.duration_months, i.work_type, i.salary_min, i.salary_max,
       i.deadline, i.created_at,
       e.company_name, e.company_logo, e.industry, e.user_id AS employer_user_id,
+      skill_search.skill_names,
       ie.embedding
     FROM internship i
     ${VISIBILITY_JOIN}
+    LEFT JOIN (
+      SELECT rs.internship_id, GROUP_CONCAT(s.display_name SEPARATOR ' ') AS skill_names
+      FROM requires_skill rs
+      JOIN skill s ON s.skill_id = rs.skill_id
+      GROUP BY rs.internship_id
+    ) skill_search ON skill_search.internship_id = i.internship_id
     LEFT JOIN internship_embedding ie ON ie.internship_id = i.internship_id
     WHERE ${filterWhereSQL}
   `;
   const [allInternships] = await pool.execute(allSQL, params);
 
-  // Step 3: Score each internship by semantic relevance
-  let scored = [];
-  if (queryEmbedding) {
-    for (const intern of allInternships) {
-      let relevanceScore = 0;
-      if (intern.embedding) {
-        const emb = typeof intern.embedding === 'string' ? JSON.parse(intern.embedding) : intern.embedding;
-        relevanceScore = embeddingService.cosineSimilarity(queryEmbedding, emb);
-      }
-      intern.relevanceScore = Math.max(0, relevanceScore);
-      delete intern.embedding; // don't send to client
-      scored.push(intern);
+  const missingEmbeddingIds = [];
+  let scored = allInternships.map((intern) => {
+    const lexicalScore = scoreLexicalRelevance(intern, queryParts);
+    const directMatch = hasDirectSearchMatch(intern, queryParts);
+    const storedEmbedding = parseEmbeddingValue(intern.embedding);
+    let semanticScore = 0;
+
+    if (queryEmbedding && storedEmbedding) {
+      semanticScore = normalizeSemanticSimilarity(
+        embeddingService.cosineSimilarity(queryEmbedding, storedEmbedding)
+      );
+    } else if (queryEmbedding && !storedEmbedding) {
+      missingEmbeddingIds.push(intern.internship_id);
     }
-  } else {
-    // Fallback: no embedding available (Gemini key missing)
-    // Use SQL LIKE as fallback
-    for (const intern of allInternships) {
-      const titleMatch = (intern.title || '').toLowerCase().includes(searchQuery.toLowerCase());
-      const descMatch = (intern.description || '').toLowerCase().includes(searchQuery.toLowerCase());
-      const companyMatch = (intern.company_name || '').toLowerCase().includes(searchQuery.toLowerCase());
-      intern.relevanceScore = titleMatch ? 0.9 : descMatch ? 0.6 : companyMatch ? 0.5 : 0;
-      delete intern.embedding;
-      scored.push(intern);
-    }
+
+    const relevanceScore = queryEmbedding && storedEmbedding
+      ? Math.max((semanticScore * 0.65) + (lexicalScore * 0.35), lexicalScore * 0.92)
+      : lexicalScore;
+
+    delete intern.embedding;
+    delete intern.skill_names;
+
+    return {
+      ...intern,
+      relevanceScore: Math.min(1, relevanceScore),
+      semanticScore,
+      lexicalScore,
+      directMatch,
+    };
+  });
+
+  queueMissingInternshipEmbeddings(missingEmbeddingIds);
+
+  scored = scored.filter((intern) => (
+    intern.directMatch ||
+    intern.semanticScore >= 0.45 ||
+    intern.lexicalScore >= 0.12
+  ));
+  await attachSkillsToList(scored);
+
+  const matchScope = req.query.match_scope === 'industry' ? 'industry' : 'all';
+  if (req.user && req.user.role === 'student' && scored.length > 0) {
+    await attachMatchScores(req.user.userId, scored, { scope: matchScope });
   }
 
-  // Step 4: For short queries, merge with SQL LIKE keyword results to catch exact matches
-  if (isShortQuery && queryEmbedding) {
-    const scoredIds = new Set(scored.map((s) => s.internship_id));
-    const searchTerm = `%${searchQuery}%`;
-    const keywordSQL = `
-      SELECT
-        i.internship_id, i.title, i.description, i.location,
-        i.duration_months, i.work_type, i.salary_min, i.salary_max,
-        i.deadline, i.created_at,
-        e.company_name, e.company_logo, e.industry, e.user_id AS employer_user_id
-      FROM internship i
-      ${VISIBILITY_JOIN}
-      WHERE ${VISIBILITY_WHERE}
-        AND (i.title LIKE ? OR i.description LIKE ? OR e.company_name LIKE ? OR i.location LIKE ?)
-    `;
-    const [keywordResults] = await pool.execute(keywordSQL, [searchTerm, searchTerm, searchTerm, searchTerm]);
-
-    for (const kw of keywordResults) {
-      if (!scoredIds.has(kw.internship_id)) {
-        kw.relevanceScore = 0.4; // keyword-only match
-        scored.push(kw);
-      } else {
-        // Boost existing entry if also keyword-matched
-        const existing = scored.find((s) => s.internship_id === kw.internship_id);
-        if (existing) existing.relevanceScore = Math.min(1, existing.relevanceScore + 0.1);
-      }
-    }
-  }
-
-  // Step 5: Filter out very low relevance (< 0.1)
-  scored = scored.filter((s) => s.relevanceScore >= 0.1);
-
-  // Step 6: Sort by relevance (default when searching), or user-chosen sort
-  if (sort === 'relevance' || sort === 'newest') {
-    // Default to relevance when searching
-    scored.sort((a, b) => b.relevanceScore - a.relevanceScore);
-  } else if (sort === 'deadline') {
-    scored.sort((a, b) => {
-      const da = a.deadline ? new Date(a.deadline) : new Date('9999-12-31');
-      const db = b.deadline ? new Date(b.deadline) : new Date('9999-12-31');
-      return da - db;
-    });
-  } else if (sort === 'salary') {
-    scored.sort((a, b) => (b.salary_max || 0) - (a.salary_max || 0));
-  }
+  scored.sort(compareSearchResults(sort));
 
   const total = scored.length;
   const paginated = scored.slice(offset, offset + limitNum);
 
-  await attachSkillsToList(paginated);
-
   if (req.user && req.user.role === 'student' && paginated.length > 0) {
-    await attachMatchScores(req.user.userId, paginated);
     await attachApplicationState(req.user.userId, paginated);
-    if (sort === 'match') {
-      paginated.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
-    }
   }
 
-  // Attach relevance label
   for (const intern of paginated) {
-    if (intern.relevanceScore >= 0.7) {
-      intern.relevanceLabel = 'Highly Relevant';
-    } else if (intern.relevanceScore >= 0.4) {
-      intern.relevanceLabel = 'Relevant';
-    } else {
-      intern.relevanceLabel = 'Somewhat Relevant';
-    }
+    assignRelevanceLabel(intern);
   }
 
   const data = paginated.map((row) => ({
@@ -450,8 +630,8 @@ const getInternship = catchAsync(async (req, res) => {
     location: internship.location,
     durationMonths: internship.duration_months,
     workType: internship.work_type,
-    salaryMin: internship.salary_min ? Number(internship.salary_min) : null,
-    salaryMax: internship.salary_max ? Number(internship.salary_max) : null,
+    salaryMin: internship.salary_min == null ? null : Number(internship.salary_min),
+    salaryMax: internship.salary_max == null ? null : Number(internship.salary_max),
     status: internship.status,
     deadline: internship.deadline,
     createdAt: internship.created_at,
@@ -494,7 +674,7 @@ const getInternship = catchAsync(async (req, res) => {
       'SELECT application_id, status FROM application WHERE student_user_id = ? AND internship_id = ? LIMIT 1',
       [String(req.user.userId), String(id)]
     );
-    data.hasApplied = apps.length > 0;
+    data.hasApplied = apps.length > 0 && apps[0].status !== 'withdrawn';
     if (apps.length > 0) {
       data.applicationStatus = apps[0].status;
     }
@@ -609,8 +789,8 @@ function formatInternshipListItem(row) {
     location: row.location,
     durationMonths: row.duration_months,
     workType: row.work_type,
-    salaryMin: row.salary_min ? Number(row.salary_min) : null,
-    salaryMax: row.salary_max ? Number(row.salary_max) : null,
+    salaryMin: row.salary_min == null ? null : Number(row.salary_min),
+    salaryMax: row.salary_max == null ? null : Number(row.salary_max),
     deadline: row.deadline,
     createdAt: row.created_at,
     employer: {
@@ -644,7 +824,7 @@ async function attachApplicationState(studentUserId, internships) {
 
   for (const intern of internships) {
     const status = stateMap[intern.internship_id];
-    intern.hasApplied = !!status;
+    intern.hasApplied = !!status && status !== 'withdrawn';
     intern.applicationStatus = status || null;
   }
 

@@ -39,9 +39,9 @@ function hashIdx(str, mod) {
 }
 
 function formatSalary(min, max) {
-  if (!min && !max) return null;
-  if (min && max) return `$${min}–$${max}/mo`;
-  if (min) return `From $${min}/mo`;
+  if (min == null && max == null) return null;
+  if (min != null && max != null) return `$${min}-$${max}/mo`;
+  if (min != null) return `From $${min}/mo`;
   return `Up to $${max}/mo`;
 }
 
@@ -117,6 +117,8 @@ export default function InternshipCard({
     salaryMax,
     deadline,
     matchScore,
+    relevanceScore,
+    relevanceLabel,
     skills,
   } = internship;
 
@@ -202,6 +204,12 @@ export default function InternshipCard({
             <Briefcase size={11} className="shrink-0" />
             {companyName}
           </p>
+          {typeof relevanceScore === 'number' && (
+            <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 rounded-lg text-[11px] font-bold bg-primary-50 dark:bg-primary-900/25 text-primary-700 dark:text-primary-300 ring-1 ring-primary-200/70 dark:ring-primary-800/50">
+              <Sparkles size={11} />
+              {relevanceLabel || 'Relevant'} - {Math.round(relevanceScore)}%
+            </span>
+          )}
         </div>
 
         {/* Meta chips */}

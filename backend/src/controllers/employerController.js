@@ -379,6 +379,9 @@ const createInternship = catchAsync(async (req, res) => {
 
     await connection.commit();
 
+    const embeddingService = require('../utils/embeddingService');
+    embeddingService.updateInternshipEmbedding(internshipId).catch(() => {});
+
     // Notify admins about new internship pending review
     try {
       const [admins] = await pool.execute(
@@ -1111,7 +1114,7 @@ const getCandidates = catchAsync(async (req, res) => {
       // Skip students who have already applied — they're tracked through the
       // applicants page, so showing them as "candidates" is just noise.
       const [applied] = await pool.execute(
-        'SELECT application_id FROM application WHERE internship_id = ? AND student_user_id = ?',
+        "SELECT application_id FROM application WHERE internship_id = ? AND student_user_id = ? AND status != 'withdrawn'",
         [id, student.user_id]
       );
       if (applied.length > 0) continue;
@@ -1195,11 +1198,18 @@ const inviteStudent = catchAsync(async (req, res) => {
   );
   if (existing.length > 0) throw new AppError('Student has already been invited', 400);
 
-  await pool.execute(
-    `INSERT INTO internship_invitation (internship_id, student_user_id, employer_user_id, message)
-     VALUES (?, ?, ?, ?)`,
-    [internshipId, studentId, userId, message || null]
-  );
+  try {
+    await pool.execute(
+      `INSERT INTO internship_invitation (internship_id, student_user_id, employer_user_id, message)
+       VALUES (?, ?, ?, ?)`,
+      [internshipId, studentId, userId, message || null]
+    );
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') {
+      throw new AppError('Student has already been invited', 400);
+    }
+    throw err;
+  }
 
   // Notify student
   await pool.execute(
@@ -1268,37 +1278,81 @@ const getAnalytics = catchAsync(async (req, res) => {
     [userId]
   );
 
-  const t = totals[0];
-  const conversionRate = t.total_applicants > 0
-    ? Math.round((t.total_accepted / t.total_applicants) * 10000) / 100
+  const [topSkills] = await pool.execute(
+    `SELECT sk.display_name AS name, COUNT(*) AS count
+     FROM requires_skill rs
+     JOIN skill sk ON sk.skill_id = rs.skill_id
+     JOIN internship i ON i.internship_id = rs.internship_id
+     WHERE i.employer_user_id = ?
+     GROUP BY sk.skill_id, sk.display_name
+     ORDER BY count DESC, sk.display_name ASC
+     LIMIT 10`,
+    [userId]
+  );
+
+  const toDateString = (value) => {
+    if (!value) return null;
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    return String(value).slice(0, 10);
+  };
+
+  const t = totals[0] || {};
+  const totalApplicants = Number(t.total_applicants || 0);
+  const averageMatchScore = t.avg_match_score ? Math.round(parseFloat(t.avg_match_score)) : 0;
+  const totalAccepted = Number(t.total_accepted || 0);
+  const totalViews = internships.reduce((sum, i) => sum + Number(i.view_count || 0), 0);
+  const conversionRate = totalViews > 0
+    ? Math.round((totalApplicants / totalViews) * 10000) / 100
     : 0;
+  const formattedInternships = internships.map((i) => ({
+    internshipId: i.internship_id,
+    title: i.title,
+    status: i.status,
+    applicantCount: Number(i.applicant_count || 0),
+    viewCount: Number(i.view_count || 0),
+    acceptedCount: Number(i.accepted_count || 0),
+    avgMatchScore: i.avg_match_score ? Math.round(parseFloat(i.avg_match_score)) : null,
+  }));
+  const formattedStatusDistribution = statusDist.map((s) => ({
+    status: s.status,
+    count: Number(s.count || 0),
+  }));
+  const formattedViewsTrend = viewsTrend.map((v) => ({
+    week: toDateString(v.week_start),
+    views: Number(v.views || 0),
+  }));
+  const formattedTopSkills = topSkills.map((s) => ({
+    name: s.name,
+    count: Number(s.count || 0),
+  }));
 
   res.json({
     success: true,
     data: {
-      internships: internships.map((i) => ({
-        internshipId: i.internship_id,
-        title: i.title,
-        status: i.status,
-        applicantCount: i.applicant_count,
-        viewCount: i.view_count,
-        acceptedCount: i.accepted_count,
-        avgMatchScore: i.avg_match_score ? Math.round(parseFloat(i.avg_match_score)) : null,
-      })),
-      statusDistribution: statusDist.map((s) => ({
+      internships: formattedInternships,
+      statusDistribution: formattedStatusDistribution.map((s) => ({
+        name: s.status,
+        value: s.count,
         status: s.status,
         count: s.count,
       })),
       overall: {
-        totalApplicants: t.total_applicants,
-        avgMatchScore: t.avg_match_score ? Math.round(parseFloat(t.avg_match_score)) : null,
-        totalAccepted: t.total_accepted,
+        totalApplicants,
+        avgMatchScore: averageMatchScore,
+        totalAccepted,
+        totalViews,
         conversionRate,
       },
-      viewsTrend: viewsTrend.map((v) => ({
-        week: v.week_start,
-        views: v.views,
+      viewsTrend: formattedViewsTrend,
+      totalApplicants,
+      averageMatchScore,
+      conversionRate,
+      applicantsPerInternship: formattedInternships.map((i) => ({
+        name: i.title,
+        applicants: i.applicantCount,
       })),
+      viewsOverTime: formattedViewsTrend,
+      topSkills: formattedTopSkills,
     },
   });
 });
@@ -1539,7 +1593,7 @@ const getTopCandidates = catchAsync(async (req, res) => {
     const studentPlaceholders = studentIds.map(() => '?').join(',');
     const [appliedRows] = await pool.execute(
       `SELECT student_user_id, internship_id FROM application
-       WHERE internship_id IN (${placeholders}) AND student_user_id IN (${studentPlaceholders})`,
+       WHERE internship_id IN (${placeholders}) AND student_user_id IN (${studentPlaceholders}) AND status != 'withdrawn'`,
       [...iIds.map(String), ...studentIds.map(String)]
     );
     for (const r of appliedRows) {

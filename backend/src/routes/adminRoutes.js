@@ -64,8 +64,22 @@ router.get('/logs/export', adminController.exportLogs);
 
 router.post('/reports/generate',
   body('reportType').notEmpty().withMessage('Report type is required'),
-  body('startDate').optional().isISO8601().withMessage('Invalid start date'),
-  body('endDate').optional().isISO8601().withMessage('Invalid end date'),
+  body('startDate').optional({ checkFalsy: true }).isISO8601({ strict: true }).withMessage('Invalid start date'),
+  body('endDate').optional({ checkFalsy: true }).isISO8601({ strict: true }).withMessage('Invalid end date'),
+  body('endDate').custom((endDate, { req }) => {
+    const { startDate } = req.body;
+    if ((startDate && !endDate) || (!startDate && endDate)) {
+      throw new Error('Choose both start and end dates, or leave both blank');
+    }
+    if (startDate && endDate && startDate > endDate) {
+      throw new Error('Start date cannot be after end date');
+    }
+    const today = new Date().toISOString().split('T')[0];
+    if ((startDate && startDate > today) || (endDate && endDate > today)) {
+      throw new Error('Report dates cannot be in the future');
+    }
+    return true;
+  }),
   handleValidationErrors,
   adminController.generateReport
 );

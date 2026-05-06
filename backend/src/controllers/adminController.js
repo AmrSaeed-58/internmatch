@@ -569,13 +569,23 @@ const exportLogs = catchAsync(async (req, res) => {
   res.send(header + rows);
 });
 
-const generateReport = catchAsync(async (req, res) => {
-  const { reportType, startDate, endDate, filters } = req.body;
-
+function validateReportRequest(reportType, startDate, endDate) {
   if (!reportType || !VALID_REPORT_TYPES.includes(reportType)) {
     throw new AppError('Invalid report type', 400);
   }
+  if ((startDate && !endDate) || (!startDate && endDate)) {
+    throw new AppError('Choose both start and end dates, or leave both blank', 400);
+  }
+  if (startDate && endDate && startDate > endDate) {
+    throw new AppError('Start date cannot be after end date', 400);
+  }
+  const today = new Date().toISOString().split('T')[0];
+  if ((startDate && startDate > today) || (endDate && endDate > today)) {
+    throw new AppError('Report dates cannot be in the future', 400);
+  }
+}
 
+async function buildReportData(reportType, startDate, endDate, limit = 500) {
   let data = [];
   const dateFilter = startDate && endDate;
 
@@ -590,8 +600,8 @@ const generateReport = catchAsync(async (req, res) => {
       `SELECT u.user_id, u.full_name, u.email, u.role, u.is_active, u.created_at,
               (SELECT COUNT(sl.log_id) FROM system_log sl WHERE sl.user_id = u.user_id) AS activityCount,
               (SELECT MAX(sl.created_at) FROM system_log sl WHERE sl.user_id = u.user_id) AS lastActivity
-       FROM users u WHERE ${where} ORDER BY u.created_at DESC LIMIT 500`,
-      params
+       FROM users u WHERE ${where} ORDER BY u.created_at DESC LIMIT ?`,
+      [...params, limit]
     );
     data = rows;
   } else if (reportType === 'internship_applications') {
@@ -614,11 +624,14 @@ const generateReport = catchAsync(async (req, res) => {
        WHERE ${where}
        GROUP BY i.internship_id
        ORDER BY totalApplications DESC
-       LIMIT 500`,
-      params
+       LIMIT ?`,
+      [...params, limit]
     );
     data = rows;
   } else if (reportType === 'student_match_ranking') {
+    const params = [];
+    const applicationJoinFilter = dateFilter ? 'AND a.applied_date BETWEEN ? AND ?' : '';
+    if (dateFilter) params.push(startDate, endDate + ' 23:59:59');
     const [rows] = await pool.query(
       `SELECT u.full_name, u.email, s.university, s.major, s.gpa,
               COUNT(a.application_id) AS applicationCount,
@@ -626,28 +639,35 @@ const generateReport = catchAsync(async (req, res) => {
               MAX(a.match_score) AS highestScore
        FROM users u
        JOIN student s ON u.user_id = s.user_id
-       LEFT JOIN application a ON a.student_user_id = u.user_id
+       LEFT JOIN application a ON a.student_user_id = u.user_id ${applicationJoinFilter}
        WHERE u.is_active = 1
        GROUP BY u.user_id
        ORDER BY avgMatchScore DESC
-       LIMIT 500`
+       LIMIT ?`,
+      [...params, limit]
     );
     data = rows;
   } else if (reportType === 'employer_performance') {
+    const params = [];
+    const internshipJoinFilter = dateFilter ? 'AND i.created_at BETWEEN ? AND ?' : '';
+    const applicationDateFilter = dateFilter ? 'AND a.applied_date BETWEEN ? AND ?' : '';
+    if (dateFilter) params.push(startDate, endDate + ' 23:59:59', startDate, endDate + ' 23:59:59');
     const [rows] = await pool.query(
       `SELECT u.full_name AS contactName, e.company_name, e.industry,
               COUNT(DISTINCT i.internship_id) AS totalInternships,
               COUNT(DISTINCT CASE WHEN i.status = 'active' THEN i.internship_id END) AS activeInternships,
               (SELECT COUNT(a.application_id)
-               FROM application a WHERE a.internship_id IN
-               (SELECT i2.internship_id FROM internship i2 WHERE i2.employer_user_id = u.user_id)) AS totalApplications
+               FROM application a
+               JOIN internship i2 ON i2.internship_id = a.internship_id
+               WHERE i2.employer_user_id = u.user_id ${applicationDateFilter}) AS totalApplications
        FROM users u
        JOIN employer e ON u.user_id = e.user_id
-       LEFT JOIN internship i ON i.employer_user_id = u.user_id
+       LEFT JOIN internship i ON i.employer_user_id = u.user_id ${internshipJoinFilter}
        WHERE u.is_active = 1
        GROUP BY u.user_id
        ORDER BY totalInternships DESC
-       LIMIT 500`
+       LIMIT ?`,
+      [...params, limit]
     );
     data = rows;
   } else if (reportType === 'system_audit') {
@@ -664,11 +684,22 @@ const generateReport = catchAsync(async (req, res) => {
        FROM system_log sl
        WHERE ${where}
        GROUP BY sl.action
-       ORDER BY count DESC`,
-      params
+       ORDER BY count DESC
+       LIMIT ?`,
+      [...params, limit]
     );
     data = rows;
   }
+
+  return data;
+}
+
+const generateReport = catchAsync(async (req, res) => {
+  const { reportType, startDate, endDate, filters } = req.body;
+
+  validateReportRequest(reportType, startDate, endDate);
+
+  const data = await buildReportData(reportType, startDate, endDate);
 
   await pool.query(
     `INSERT INTO report (admin_user_id, report_type, report_description, filters_json)
@@ -681,6 +712,8 @@ const generateReport = catchAsync(async (req, res) => {
     success: true,
     data: {
       reportType,
+      startDate: startDate || null,
+      endDate: endDate || null,
       generatedAt: new Date().toISOString(),
       rowCount: data.length,
       data,
@@ -689,31 +722,15 @@ const generateReport = catchAsync(async (req, res) => {
 });
 
 const exportReport = catchAsync(async (req, res) => {
-  const { reportType, startDate, endDate, format } = req.query;
+  const { reportType, startDate, endDate, format = 'csv' } = req.query;
 
-  if (!reportType || !VALID_REPORT_TYPES.includes(reportType)) {
-    throw new AppError('Invalid report type', 400);
-  }
+  validateReportRequest(reportType, startDate, endDate);
   if (format !== 'csv') {
     throw new AppError('Only CSV export is supported', 400);
   }
 
-  // Re-generate the report data (same logic as generateReport, simplified)
-  // For brevity we'll delegate to a helper – but since reports are generated on demand,
-  // we'll just generate CSV inline here
-  const fakeReq = { body: { reportType, startDate, endDate }, user: req.user };
-  const reportData = [];
+  const reportData = await buildReportData(reportType, startDate, endDate, 10000);
 
-  // Quick inline generation
-  if (reportType === 'user_activity') {
-    const [rows] = await pool.query(
-      `SELECT u.user_id, u.full_name, u.email, u.role, u.is_active, u.created_at
-       FROM users u ORDER BY u.created_at DESC LIMIT 1000`
-    );
-    reportData.push(...rows);
-  }
-
-  // Audit log
   await pool.query(
     `INSERT INTO report (admin_user_id, report_type, report_description, filters_json)
      VALUES (?, ?, ?, ?)`,
@@ -736,6 +753,7 @@ const exportReport = catchAsync(async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename=${reportType}_report.csv`);
   res.send(headers + rows);
 });
+
 
 const getNotifications = catchAsync(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1);

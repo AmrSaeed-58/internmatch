@@ -39,7 +39,7 @@ const CHART_COLORS = {
 
 const STATUS_COLORS = {
   pending: CHART_COLORS.amber,
-  reviewing: CHART_COLORS.primary,
+  under_review: CHART_COLORS.primary,
   shortlisted: CHART_COLORS.violet,
   interview_scheduled: '#06B6D4',
   accepted: CHART_COLORS.accent,

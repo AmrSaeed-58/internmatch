@@ -16,6 +16,8 @@ import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';
 import * as adminAPI from '../../api/admin';
 
+const todayString = () => new Date().toISOString().split('T')[0];
+
 const REPORT_TYPES = [
   { value: 'user_activity',            label: 'User Activity',           icon: Users },
   { value: 'internship_applications',  label: 'Internship Applications', icon: Briefcase },
@@ -52,21 +54,45 @@ export default function AdminReports() {
   const [dateTo, setDateTo]     = useState('');
   const [generated, setGenerated] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  function validateDates() {
+    const nextErrors = {};
+    const today = todayString();
+
+    if ((dateFrom && !dateTo) || (!dateFrom && dateTo)) {
+      nextErrors.dateRange = 'Choose both From and To dates, or leave both blank.';
+    }
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      nextErrors.dateRange = 'From date cannot be after To date.';
+    }
+    if (dateFrom && dateFrom > today) {
+      nextErrors.dateFrom = 'From date cannot be in the future.';
+    }
+    if (dateTo && dateTo > today) {
+      nextErrors.dateTo = 'To date cannot be in the future.';
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  }
 
   async function handleGenerate(e) {
     e.preventDefault();
+    if (!validateDates()) return;
+
     setGenerating(true);
     try {
       const res = await adminAPI.generateReport({
         reportType,
-        startDate: dateFrom,
-        endDate: dateTo,
+        ...(dateFrom ? { startDate: dateFrom } : {}),
+        ...(dateTo ? { endDate: dateTo } : {}),
       });
       const report = res.data.data;
       setGenerated({
         type: report.reportType,
-        dateFrom,
-        dateTo,
+        dateFrom: report.startDate || dateFrom,
+        dateTo: report.endDate || dateTo,
         generatedAt: report.generatedAt,
         rowCount: report.rowCount,
         rows: report.data,
@@ -131,19 +157,33 @@ export default function AdminReports() {
                     <input
                       type="date"
                       value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900/50 text-sm text-surface-800 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-colors duration-150 cursor-pointer"
+                      max={todayString()}
+                      onChange={(e) => {
+                        setDateFrom(e.target.value);
+                        if (Object.keys(errors).length) setErrors({});
+                      }}
+                      className={`w-full px-3.5 py-2.5 rounded-xl border ${errors.dateFrom || errors.dateRange ? 'border-red-400 dark:border-red-500 focus:ring-red-400/30' : 'border-surface-200 dark:border-surface-700 focus:ring-primary-500/30'} bg-white dark:bg-surface-900/50 text-sm text-surface-800 dark:text-surface-100 focus:outline-none focus:ring-2 transition-colors duration-150 cursor-pointer`}
                     />
+                    {errors.dateFrom && <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{errors.dateFrom}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-surface-400 dark:text-surface-500 mb-1.5">To Date</label>
                     <input
                       type="date"
                       value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900/50 text-sm text-surface-800 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-colors duration-150 cursor-pointer"
+                      min={dateFrom || undefined}
+                      max={todayString()}
+                      onChange={(e) => {
+                        setDateTo(e.target.value);
+                        if (Object.keys(errors).length) setErrors({});
+                      }}
+                      className={`w-full px-3.5 py-2.5 rounded-xl border ${errors.dateTo || errors.dateRange ? 'border-red-400 dark:border-red-500 focus:ring-red-400/30' : 'border-surface-200 dark:border-surface-700 focus:ring-primary-500/30'} bg-white dark:bg-surface-900/50 text-sm text-surface-800 dark:text-surface-100 focus:outline-none focus:ring-2 transition-colors duration-150 cursor-pointer`}
                     />
+                    {errors.dateTo && <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{errors.dateTo}</p>}
                   </div>
+                  {errors.dateRange && (
+                    <p className="text-xs text-red-600 dark:text-red-400">{errors.dateRange}</p>
+                  )}
                   <button
                     type="submit"
                     disabled={generating}
@@ -184,7 +224,7 @@ export default function AdminReports() {
                       </h2>
                       <div className="flex items-center gap-2 mt-1.5 text-sm text-surface-500 dark:text-surface-400 font-medium">
                         <CalendarDays size={14} />
-                        <span>{generated.dateFrom} -- {generated.dateTo}</span>
+                        <span>{generated.dateFrom && generated.dateTo ? `${generated.dateFrom} - ${generated.dateTo}` : 'All time'}</span>
                         <span className="text-surface-300 dark:text-surface-600">·</span>
                         <span>{generated.rowCount} records</span>
                       </div>

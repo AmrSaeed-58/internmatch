@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';
+import { useAuth } from '../../contexts/AuthContext';
 import * as studentAPI from '../../api/student';
 import { computeProfileStrength } from '../../utils/profileStrength';
 import { MAJORS, JORDAN_UNIVERSITIES } from '../../utils/academicData';
@@ -182,6 +183,7 @@ function formatDate(dateStr) {
 }
 
 export default function StudentProfile() {
+  const { updateUser } = useAuth();
   const [profile, setProfile] = useState(null);
   const [original, setOriginal] = useState(null);
   const [skills, setSkills] = useState([]);
@@ -253,6 +255,7 @@ export default function StudentProfile() {
         dateOfBirth: profile.dateOfBirth || null,
         location: profile.location || null,
       });
+      updateUser({ fullName: profile.fullName });
       setOriginal(profile);
       setEditMode((m) => ({ ...m, personal: false }));
       toast.success('Personal info saved');
@@ -385,6 +388,7 @@ export default function StudentProfile() {
       const url = res.data.data.profilePicture;
       setProfile((p) => ({ ...p, profilePicture: url }));
       setOriginal((p) => ({ ...p, profilePicture: url }));
+      updateUser({ profilePicture: url });
       toast.success('Profile picture updated');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to upload picture');
@@ -400,6 +404,7 @@ export default function StudentProfile() {
       await studentAPI.deleteProfilePicture();
       setProfile((p) => ({ ...p, profilePicture: null }));
       setOriginal((p) => ({ ...p, profilePicture: null }));
+      updateUser({ profilePicture: null });
       toast.success('Profile picture removed');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to remove picture');
@@ -613,11 +618,11 @@ export default function StudentProfile() {
                   <FormField label="Graduation Year" required>
                     <TextInput
                       type="number"
-                      min="2020"
-                      max="2035"
+                      min={currentYear - 10}
+                      max={currentYear + 10}
                       value={profile.graduationYear || ''}
                       onChange={(e) => setProfile((p) => ({ ...p, graduationYear: parseInt(e.target.value) || '' }))}
-                      placeholder="2025"
+                      placeholder={String(currentYear + 1)}
                     />
                   </FormField>
                 </div>
@@ -822,4 +827,3 @@ export default function StudentProfile() {
     </DashboardLayout>
   );
 }
-

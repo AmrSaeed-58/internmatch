@@ -1093,8 +1093,8 @@ const getApplication = catchAsync(async (req, res) => {
         location: r.location,
         workType: r.work_type,
         durationMonths: r.duration_months,
-        salaryMin: r.salary_min ? Number(r.salary_min) : null,
-        salaryMax: r.salary_max ? Number(r.salary_max) : null,
+        salaryMin: r.salary_min == null ? null : Number(r.salary_min),
+        salaryMax: r.salary_max == null ? null : Number(r.salary_max),
         deadline: r.deadline,
         status: r.internship_status,
         createdAt: r.internship_created_at,
@@ -1235,7 +1235,45 @@ const applyToInternship = catchAsync(async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    try {
+    const [existingRows] = await connection.execute(
+      `SELECT application_id, status
+       FROM application
+       WHERE student_user_id = ? AND internship_id = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [String(studentId), String(internshipId)]
+    );
+    const existingApplication = existingRows[0];
+    const oldStatus = existingApplication?.status || null;
+
+    if (existingApplication && oldStatus !== 'withdrawn') {
+      throw new AppError('You have already applied to this internship', 409);
+    }
+
+    if (existingApplication) {
+      applicationId = existingApplication.application_id;
+      await connection.execute(
+        `UPDATE application
+         SET resume_id = ?,
+             submitted_resume_path = ?,
+             submitted_resume_filename = ?,
+             cover_letter = ?,
+             match_score = ?,
+             status = 'pending',
+             applied_date = NOW(),
+             status_updated_at = NOW(),
+             employer_note = NULL
+         WHERE application_id = ?`,
+        [
+          String(resume.resume_id),
+          resume.file_path,
+          resume.original_filename,
+          coverLetter || null,
+          matchScore != null ? matchScore.toFixed(2) : null,
+          String(applicationId),
+        ]
+      );
+    } else {
       const [result] = await connection.execute(
         `INSERT INTO application
           (student_user_id, internship_id, resume_id, submitted_resume_path,
@@ -1252,18 +1290,13 @@ const applyToInternship = catchAsync(async (req, res) => {
         ]
       );
       applicationId = result.insertId;
-    } catch (err) {
-      if (err.code === 'ER_DUP_ENTRY') {
-        throw new AppError('You have already applied to this internship', 409);
-      }
-      throw err;
     }
 
     await connection.execute(
       `INSERT INTO application_status_history
         (application_id, old_status, new_status, changed_by_user_id)
-       VALUES (?, NULL, 'pending', ?)`,
-      [String(applicationId), String(studentId)]
+       VALUES (?, ?, 'pending', ?)`,
+      [String(applicationId), oldStatus, String(studentId)]
     );
 
     await connection.execute(
@@ -1388,8 +1421,8 @@ const getBookmarks = catchAsync(async (req, res) => {
       location: r.location,
       workType: r.work_type,
       durationMonths: r.duration_months,
-      salaryMin: r.salary_min ? Number(r.salary_min) : null,
-      salaryMax: r.salary_max ? Number(r.salary_max) : null,
+      salaryMin: r.salary_min == null ? null : Number(r.salary_min),
+      salaryMax: r.salary_max == null ? null : Number(r.salary_max),
       deadline: r.deadline,
       createdAt: r.created_at,
       status: r.status,
