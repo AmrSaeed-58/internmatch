@@ -35,6 +35,8 @@ coverage/
 *.tmp
 temporary screenshots/
 GP2 DOCUMENTATION/
+README.md
+design-preview.html
 
 # Tooling caches
 .claude/
