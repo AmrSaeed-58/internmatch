@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Send,
   Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -272,6 +273,20 @@ export default function AICandidates() {
                                   +{candidate.skills.length - 4}
                                 </span>
                               )}
+                            </div>
+                          )}
+
+                          {Array.isArray(candidate.matchAlerts) && candidate.matchAlerts.length > 0 && (
+                            <div className="flex flex-col gap-1 mt-3">
+                              {candidate.matchAlerts.map((msg, i) => (
+                                <div
+                                  key={i}
+                                  className="flex items-start gap-1.5 px-2 py-1.5 rounded-md text-[10px] font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 ring-1 ring-amber-200/60 dark:ring-amber-800/40"
+                                >
+                                  <AlertTriangle size={10} className="shrink-0 mt-0.5" />
+                                  <span>{msg}</span>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>

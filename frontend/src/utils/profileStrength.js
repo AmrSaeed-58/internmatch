@@ -1,15 +1,16 @@
-// Mirrors backend computeProfileBonus weights so the UI matches what's used for matching.
-// Mandatory signup fields (full name, university, major, graduation year) are excluded
-// since they're always present and don't differentiate profiles.
+// Heuristic UI score that nudges students to fill in optional profile fields.
+// This is now decoupled from the matching engine (which only uses required +
+// structured signals — major, GPA, location, skills). The percentage shown is
+// purely a "completeness nudge".
 //
 // Weights (sum 100):
 //   resume:       30
 //   skills:       25 (5 per skill, max 5)
-//   bio:          15 (≥ 30 chars to count)
+//   bio:          15 (>= 30 chars to count)
 //   linkedin_url: 10
 //   gpa:           5
 //   phone:         5
-//   location:      5
+//   city/country:  5 (either counts)
 //   github_url:    5
 export function computeProfileStrength(profile, skills = []) {
   if (!profile) return 0;
@@ -19,7 +20,7 @@ export function computeProfileStrength(profile, skills = []) {
   if (profile.linkedinUrl) score += 10;
   if (profile.gpa) score += 5;
   if (profile.phone) score += 5;
-  if (profile.location) score += 5;
+  if (profile.city || profile.country || profile.location) score += 5;
   if (profile.githubUrl) score += 5;
   score += Math.min(25, (skills?.length || 0) * 5);
   return Math.min(100, score);
@@ -47,7 +48,7 @@ export function getProfileGaps(profile, skills = []) {
   if (!profile.linkedinUrl) gaps.push({ label: 'Add LinkedIn profile', points: 10, key: 'linkedin' });
   if (!profile.gpa) gaps.push({ label: 'Add your GPA', points: 5, key: 'gpa' });
   if (!profile.phone) gaps.push({ label: 'Add phone number', points: 5, key: 'phone' });
-  if (!profile.location) gaps.push({ label: 'Add your location', points: 5, key: 'location' });
+  if (!profile.city && !profile.country && !profile.location) gaps.push({ label: 'Add your location', points: 5, key: 'location' });
   if (!profile.githubUrl) gaps.push({ label: 'Add GitHub profile', points: 5, key: 'github' });
   return gaps.sort((a, b) => b.points - a.points);
 }

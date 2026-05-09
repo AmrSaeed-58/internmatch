@@ -25,10 +25,9 @@ DROP TABLE IF EXISTS conversation;
 DROP TABLE IF EXISTS bookmark;
 DROP TABLE IF EXISTS application_status_history;
 DROP TABLE IF EXISTS application;
+DROP TABLE IF EXISTS match_score_cache;
 DROP TABLE IF EXISTS requires_skill;
 DROP TABLE IF EXISTS has_skill;
-DROP TABLE IF EXISTS student_embedding;
-DROP TABLE IF EXISTS internship_embedding;
 DROP TABLE IF EXISTS skill;
 DROP TABLE IF EXISTS resume;
 DROP TABLE IF EXISTS internship;
@@ -80,7 +79,8 @@ CREATE TABLE employer (
   twitter_url         VARCHAR(255) DEFAULT NULL,
   facebook_url        VARCHAR(255) DEFAULT NULL,
   instagram_url       VARCHAR(255) DEFAULT NULL,
-  location            VARCHAR(150) DEFAULT NULL,
+  city                VARCHAR(100) DEFAULT NULL,
+  country             VARCHAR(100) DEFAULT NULL,
   updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (user_id),
   CONSTRAINT fk_employer_user FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
@@ -98,7 +98,8 @@ CREATE TABLE student (
   bio                   TEXT         DEFAULT NULL,
   gender                VARCHAR(20)  DEFAULT NULL,
   date_of_birth         DATE         DEFAULT NULL,
-  location              VARCHAR(150) DEFAULT NULL,
+  city                  VARCHAR(100) DEFAULT NULL,
+  country               VARCHAR(100) DEFAULT NULL,
   linkedin_url          VARCHAR(255) DEFAULT NULL,
   github_url            VARCHAR(255) DEFAULT NULL,
   instagram_url         VARCHAR(255) DEFAULT NULL,
@@ -120,11 +121,13 @@ CREATE TABLE internship (
   employer_user_id  INT           NOT NULL,
   title             VARCHAR(200)  NOT NULL,
   description       TEXT          NOT NULL,
-  location          VARCHAR(150)  NOT NULL,
+  city              VARCHAR(100)  NOT NULL,
+  country           VARCHAR(100)  NOT NULL,
   duration_months   INT           NOT NULL,
   work_type         ENUM('remote','hybrid','on-site') NOT NULL,
   salary_min        DECIMAL(10,2) DEFAULT NULL,
   salary_max        DECIMAL(10,2) DEFAULT NULL,
+  minimum_gpa       DECIMAL(3,2)  DEFAULT NULL,
   status            ENUM('pending_approval','active','closed','rejected') NOT NULL DEFAULT 'pending_approval',
   admin_review_note TEXT          DEFAULT NULL,
   deadline          DATE          DEFAULT NULL,
@@ -139,7 +142,8 @@ CREATE TABLE internship (
   CONSTRAINT fk_internship_employer  FOREIGN KEY (employer_user_id) REFERENCES employer (user_id) ON DELETE CASCADE,
   CONSTRAINT chk_internship_duration CHECK (duration_months > 0 AND duration_months <= 24),
   CONSTRAINT chk_salary_min          CHECK (salary_min IS NULL OR salary_min >= 0),
-  CONSTRAINT chk_salary_max          CHECK (salary_max IS NULL OR (salary_max >= 0 AND (salary_min IS NULL OR salary_max >= salary_min)))
+  CONSTRAINT chk_salary_max          CHECK (salary_max IS NULL OR (salary_max >= 0 AND (salary_min IS NULL OR salary_max >= salary_min))),
+  CONSTRAINT chk_internship_min_gpa  CHECK (minimum_gpa IS NULL OR (minimum_gpa BETWEEN 0.00 AND 4.00))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================
@@ -174,7 +178,7 @@ CREATE TABLE skill (
   display_name    VARCHAR(100) NOT NULL,
   normalized_name VARCHAR(100) NOT NULL,
   category        ENUM('programming','web','data','ai_ml','devops','mobile','design','soft_skill','other') NOT NULL DEFAULT 'other',
-  name_embedding  JSON         DEFAULT NULL,
+  name_embedding  JSON         DEFAULT NULL,  -- used by skillResolver for synonym detection (e.g. "ReactJS" -> "React"); independent of the matching engine
   PRIMARY KEY (skill_id),
   UNIQUE KEY uq_skill_normalized (normalized_name),
   KEY idx_skill_category (category)
@@ -203,30 +207,22 @@ CREATE TABLE requires_skill (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================
--- Embeddings (Gemini text-embedding-004, 768 dims). Cached per source row.
+-- match_score_cache  — precomputed (student, internship) scores for the
+-- matching engine. Read-through cache: missing rows are computed on first
+-- request and inserted; rows are deleted on profile/internship updates so
+-- the next request rebuilds from scratch.
 -- =============================================================================
-CREATE TABLE internship_embedding (
-  internship_id    INT          NOT NULL,
-  embedding        JSON         NOT NULL,
-  source_text_hash VARCHAR(64)  NOT NULL,
-  model_name       VARCHAR(100) NOT NULL DEFAULT 'text-embedding-004',
-  dimensions       INT          NOT NULL DEFAULT 768,
-  created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (internship_id),
-  CONSTRAINT fk_internship_embedding_internship FOREIGN KEY (internship_id) REFERENCES internship (internship_id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE student_embedding (
-  student_user_id  INT          NOT NULL,
-  embedding        JSON         NOT NULL,
-  source_text_hash VARCHAR(64)  NOT NULL,
-  model_name       VARCHAR(100) NOT NULL DEFAULT 'text-embedding-004',
-  dimensions       INT          NOT NULL DEFAULT 768,
-  created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (student_user_id),
-  CONSTRAINT fk_student_embedding_student FOREIGN KEY (student_user_id) REFERENCES student (user_id) ON DELETE CASCADE
+CREATE TABLE match_score_cache (
+  student_user_id INT          NOT NULL,
+  internship_id   INT          NOT NULL,
+  final_score     DECIMAL(5,2) NOT NULL,
+  breakdown       JSON         NOT NULL,
+  computed_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (student_user_id, internship_id),
+  KEY idx_cache_student_score (student_user_id, final_score DESC),
+  KEY idx_cache_internship    (internship_id),
+  CONSTRAINT fk_cache_student    FOREIGN KEY (student_user_id) REFERENCES student   (user_id)        ON DELETE CASCADE,
+  CONSTRAINT fk_cache_internship FOREIGN KEY (internship_id)   REFERENCES internship (internship_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================

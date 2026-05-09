@@ -11,6 +11,7 @@ import {
   Building2,
   Home,
   AlertCircle,
+  AlertTriangle,
   Sparkles,
   Loader2,
   Briefcase,
@@ -117,6 +118,7 @@ export default function InternshipCard({
     salaryMax,
     deadline,
     matchScore,
+    matchAlerts,
     relevanceScore,
     relevanceLabel,
     skills,
@@ -258,6 +260,21 @@ export default function InternshipCard({
                 +{extraSkillCount} more
               </span>
             )}
+          </div>
+        )}
+
+        {/* Match alerts (logistics warnings from the matching engine) */}
+        {Array.isArray(matchAlerts) && matchAlerts.length > 0 && (
+          <div className="flex flex-col gap-1">
+            {matchAlerts.map((msg, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 ring-1 ring-amber-200/60 dark:ring-amber-800/40"
+              >
+                <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                <span>{msg}</span>
+              </div>
+            ))}
           </div>
         )}
 

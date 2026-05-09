@@ -6,6 +6,8 @@ const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 const { normalizeSkillName } = require('../utils/normalizeSkill');
 const { findOrCreateSkill } = require('../utils/skillResolver');
+const matchScoreCache = require('../services/matchScoreCache');
+const { formatLocation } = require('./internshipController');
 
 const BCRYPT_SALT_ROUNDS = 12;
 const uploadDir = process.env.UPLOAD_DIR || './uploads';
@@ -25,7 +27,7 @@ const getProfile = catchAsync(async (req, res) => {
 
   const [empRows] = await pool.execute(
     `SELECT company_name, industry, company_size, company_description, company_logo,
-            website_url, linkedin_url, twitter_url, facebook_url, instagram_url, location
+            website_url, linkedin_url, twitter_url, facebook_url, instagram_url, city, country
      FROM employer WHERE user_id = ?`,
     [userId]
   );
@@ -59,7 +61,9 @@ const getProfile = catchAsync(async (req, res) => {
       twitterUrl: e.twitter_url,
       facebookUrl: e.facebook_url,
       instagramUrl: e.instagram_url,
-      location: e.location,
+      city: e.city,
+      country: e.country,
+      location: formatLocation(e.city, e.country),
       activeInternships: countRows[0].count,
     },
   });
@@ -81,7 +85,8 @@ const updateProfile = catchAsync(async (req, res) => {
     twitterUrl: 'twitter_url',
     facebookUrl: 'facebook_url',
     instagramUrl: 'instagram_url',
-    location: 'location',
+    city: 'city',
+    country: 'country',
   };
 
   if (req.body.industry && !VALID_INDUSTRIES.includes(req.body.industry)) {
@@ -125,6 +130,13 @@ const updateProfile = catchAsync(async (req, res) => {
     }
 
     await connection.commit();
+
+    // Industry change moves all this employer's internships in/out of student
+    // recommendations — clear cached scores so the next read reflects it.
+    if (req.body.industry !== undefined) {
+      await matchScoreCache.invalidateForEmployer(userId);
+    }
+
     res.json({ success: true, message: 'Profile updated successfully' });
   } catch (err) {
     await connection.rollback();
@@ -328,12 +340,25 @@ ${text.substring(0, 4000)}`;
 const createInternship = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const {
-    title, description, location, workType, durationMonths,
-    salaryMin, salaryMax, deadline, skills,
+    title, description, city, country, workType, durationMonths,
+    salaryMin, salaryMax, minimumGpa, deadline, skills,
   } = req.body;
 
   if (!skills || !Array.isArray(skills) || skills.length === 0) {
     throw new AppError('At least one skill is required', 400);
+  }
+
+  const mandatoryCount = skills.filter((s) => s.isMandatory !== false).length;
+  if (mandatoryCount === 0) {
+    throw new AppError('At least one mandatory skill is required', 400);
+  }
+
+  if (!city || !country) {
+    throw new AppError('Both city and country are required', 400);
+  }
+
+  if (minimumGpa != null && (minimumGpa < 0 || minimumGpa > 4)) {
+    throw new AppError('Minimum GPA must be between 0.00 and 4.00', 400);
   }
 
   if (deadline) {
@@ -348,12 +373,14 @@ const createInternship = catchAsync(async (req, res) => {
     await connection.beginTransaction();
 
     const [result] = await connection.execute(
-      `INSERT INTO internship (employer_user_id, title, description, location, work_type,
-        duration_months, salary_min, salary_max, status, deadline)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?)`,
+      `INSERT INTO internship (employer_user_id, title, description, city, country, work_type,
+        duration_months, salary_min, salary_max, minimum_gpa, status, deadline)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?)`,
       [
-        userId, title, description, location, workType,
-        durationMonths, salaryMin || null, salaryMax || null, deadline || null,
+        userId, title, description, city, country, workType,
+        durationMonths, salaryMin || null, salaryMax || null,
+        minimumGpa == null ? null : Number(minimumGpa),
+        deadline || null,
       ]
     );
 
@@ -378,9 +405,6 @@ const createInternship = catchAsync(async (req, res) => {
     }
 
     await connection.commit();
-
-    const embeddingService = require('../utils/embeddingService');
-    embeddingService.updateInternshipEmbedding(internshipId).catch(() => {});
 
     // Notify admins about new internship pending review
     try {
@@ -433,7 +457,7 @@ const getInternships = catchAsync(async (req, res) => {
 
   const [rows] = await pool.execute(
     `SELECT i.internship_id, i.title, i.status, i.deadline, i.created_at, i.updated_at,
-            i.work_type, i.location, i.admin_review_note,
+            i.work_type, i.city, i.country, i.admin_review_note,
             (SELECT COUNT(*) FROM application a WHERE a.internship_id = i.internship_id) AS applicant_count,
             (SELECT COUNT(*) FROM internship_view iv WHERE iv.internship_id = i.internship_id) AS view_count
      FROM internship i
@@ -453,7 +477,9 @@ const getInternships = catchAsync(async (req, res) => {
       createdAt: r.created_at,
       updatedAt: r.updated_at,
       workType: r.work_type,
-      location: r.location,
+      city: r.city,
+      country: r.country,
+      location: formatLocation(r.city, r.country),
       adminReviewNote: r.admin_review_note,
       applicantCount: r.applicant_count,
       viewCount: r.view_count,
@@ -472,8 +498,8 @@ const getInternship = catchAsync(async (req, res) => {
   const { id } = req.params;
 
   const [rows] = await pool.execute(
-    `SELECT i.internship_id, i.title, i.description, i.location, i.work_type,
-            i.duration_months, i.salary_min, i.salary_max, i.status, i.admin_review_note,
+    `SELECT i.internship_id, i.title, i.description, i.city, i.country, i.work_type,
+            i.duration_months, i.salary_min, i.salary_max, i.minimum_gpa, i.status, i.admin_review_note,
             i.deadline, i.created_at, i.updated_at,
             (SELECT COUNT(*) FROM application a WHERE a.internship_id = i.internship_id) AS applicant_count,
             (SELECT COUNT(*) FROM internship_view iv WHERE iv.internship_id = i.internship_id) AS view_count
@@ -501,11 +527,14 @@ const getInternship = catchAsync(async (req, res) => {
       internshipId: internship.internship_id,
       title: internship.title,
       description: internship.description,
-      location: internship.location,
+      city: internship.city,
+      country: internship.country,
+      location: formatLocation(internship.city, internship.country),
       workType: internship.work_type,
       durationMonths: internship.duration_months,
       salaryMin: internship.salary_min,
       salaryMax: internship.salary_max,
+      minimumGpa: internship.minimum_gpa == null ? null : Number(internship.minimum_gpa),
       status: internship.status,
       adminReviewNote: internship.admin_review_note,
       deadline: internship.deadline,
@@ -542,15 +571,25 @@ const updateInternship = catchAsync(async (req, res) => {
   }
 
   const {
-    title, description, location, workType, durationMonths,
-    salaryMin, salaryMax, deadline, skills,
+    skills, minimumGpa,
   } = req.body;
 
-  if (deadline) {
-    const deadlineDate = new Date(deadline);
+  if (req.body.deadline) {
+    const deadlineDate = new Date(req.body.deadline);
     if (deadlineDate <= new Date()) {
       throw new AppError('Deadline must be in the future', 400);
     }
+  }
+
+  if (skills && Array.isArray(skills) && skills.length > 0) {
+    const mandatoryCount = skills.filter((s) => s.isMandatory !== false).length;
+    if (mandatoryCount === 0) {
+      throw new AppError('At least one mandatory skill is required', 400);
+    }
+  }
+
+  if (minimumGpa != null && minimumGpa !== '' && (Number(minimumGpa) < 0 || Number(minimumGpa) > 4)) {
+    throw new AppError('Minimum GPA must be between 0.00 and 4.00', 400);
   }
 
   const connection = await pool.getConnection();
@@ -562,11 +601,13 @@ const updateInternship = catchAsync(async (req, res) => {
     const fieldMap = {
       title: 'title',
       description: 'description',
-      location: 'location',
+      city: 'city',
+      country: 'country',
       workType: 'work_type',
       durationMonths: 'duration_months',
       salaryMin: 'salary_min',
       salaryMax: 'salary_max',
+      minimumGpa: 'minimum_gpa',
       deadline: 'deadline',
     };
 
@@ -612,9 +653,9 @@ const updateInternship = catchAsync(async (req, res) => {
 
     await connection.commit();
 
-    // Fire-and-forget: regenerate internship embedding on edit
-    const embeddingService = require('../utils/embeddingService');
-    embeddingService.updateInternshipEmbedding(id).catch(() => {});
+    // Internship inputs changed — clear cached scores so the next read
+    // recomputes against the new data.
+    await matchScoreCache.invalidateForInternship(id);
 
     res.json({ success: true, message: 'Internship updated successfully' });
   } catch (err) {
@@ -684,6 +725,9 @@ const closeInternship = catchAsync(async (req, res) => {
     [id]
   );
 
+  // Closed internships are no longer recommended; drop their cached scores.
+  await matchScoreCache.invalidateForInternship(id);
+
   res.json({ success: true, message: 'Internship closed' });
 });
 
@@ -710,9 +754,8 @@ const reopenInternship = catchAsync(async (req, res) => {
     [id]
   );
 
-  // Fire-and-forget: regenerate internship embedding on reopen
-  const embeddingService = require('../utils/embeddingService');
-  embeddingService.updateInternshipEmbedding(id).catch(() => {});
+  // Reopened internships re-enter recommendations; cache will rebuild lazily.
+  await matchScoreCache.invalidateForInternship(id);
 
   res.json({ success: true, message: 'Internship reopened' });
 });
@@ -869,7 +912,7 @@ const getApplicantProfile = catchAsync(async (req, res) => {
 
   const [studentRows] = await pool.execute(
     `SELECT major, university, university_start_date, graduation_year, gpa, bio,
-            location, linkedin_url, github_url, instagram_url, phone, primary_resume_id
+            city, country, linkedin_url, github_url, instagram_url, phone, primary_resume_id
      FROM student WHERE user_id = ?`,
     [studentId]
   );
@@ -914,7 +957,9 @@ const getApplicantProfile = catchAsync(async (req, res) => {
       graduationStatus: s.graduation_year && s.graduation_year < currentYear ? 'graduated' : 'enrolled',
       gpa: s.gpa,
       bio: s.bio,
-      location: s.location,
+      city: s.city,
+      country: s.country,
+      location: formatLocation(s.city, s.country),
       linkedinUrl: s.linkedin_url,
       githubUrl: s.github_url,
       instagramUrl: s.instagram_url,
@@ -1063,99 +1108,92 @@ const getCandidates = catchAsync(async (req, res) => {
     return res.json({ success: true, data: [], pagination: { page: pageNum, limit: limitNum, total: 0, totalPages: 0 } });
   }
 
+  // Pre-filter: only score students who haven't applied (already-applied
+  // students are surfaced via the applicants page).
   const [students] = await pool.execute(
     `SELECT s.user_id, u.full_name, u.email, u.profile_picture,
             s.university, s.major, s.gpa, s.graduation_year
-     FROM student s
-     JOIN users u ON u.user_id = s.user_id
-     WHERE u.is_active = 1`
+       FROM student s
+       JOIN users u ON u.user_id = s.user_id
+      WHERE u.is_active = 1
+        AND s.user_id NOT IN (
+          SELECT student_user_id FROM application
+           WHERE internship_id = ? AND status != 'withdrawn'
+        )`,
+    [id]
   );
 
-  // Import unified scoring helpers
-  const { computeSkillScore, computeProfileBonus } = require('./internshipController');
-  const embeddingService = require('../utils/embeddingService');
-
-  // Format required skills for computeSkillScore
-  const formattedReqSkills = reqSkills.map((rs) => ({
-    skillId: rs.skill_id,
-    requiredLevel: rs.required_level,
-    isMandatory: !!rs.is_mandatory,
-  }));
-
-  // Score each student
-  const candidates = [];
   const currentYear = new Date().getFullYear();
+  const minScoreNum = parseFloat(minScore) || 0;
 
+  // Pull cached scores for this internship in one query, then fill misses.
+  const studentIds = students.map((s) => s.user_id);
+  if (studentIds.length === 0) {
+    return res.json({ success: true, data: [], pagination: { page: pageNum, limit: limitNum, total: 0, totalPages: 0 } });
+  }
+
+  const placeholders = studentIds.map(() => '?').join(',');
+  const [cachedRows] = await pool.execute(
+    `SELECT student_user_id, final_score, breakdown FROM match_score_cache
+      WHERE internship_id = ? AND student_user_id IN (${placeholders})`,
+    [String(id), ...studentIds.map(String)]
+  );
+  const cachedScoreById = {};
+  for (const row of cachedRows) {
+    cachedScoreById[row.student_user_id] = {
+      finalScore: Number(row.final_score),
+      breakdown: typeof row.breakdown === 'string' ? JSON.parse(row.breakdown) : row.breakdown,
+    };
+  }
+
+  const candidates = [];
   for (const student of students) {
-    const [studentSkills] = await pool.execute(
-      `SELECT hs.skill_id, hs.proficiency_level
-       FROM has_skill hs WHERE hs.student_user_id = ?`,
+    let scored = cachedScoreById[student.user_id];
+    if (!scored) {
+      const result = await matchScoreCache.computeAndStore(student.user_id, id);
+      if (!result) continue;
+      scored = { finalScore: result.finalScore, breakdown: result.breakdown };
+    }
+
+    if (scored.finalScore < minScoreNum) continue;
+
+    const [topSkills] = await pool.execute(
+      `SELECT s.display_name, hs.proficiency_level
+         FROM has_skill hs
+         JOIN skill s ON s.skill_id = hs.skill_id
+        WHERE hs.student_user_id = ?
+        ORDER BY FIELD(hs.proficiency_level, 'advanced', 'intermediate', 'beginner')
+        LIMIT 5`,
       [student.user_id]
     );
 
-    const studentSkillMap = {};
-    for (const sk of studentSkills) {
-      studentSkillMap[sk.skill_id] = sk.proficiency_level;
-    }
+    const [invited] = await pool.execute(
+      'SELECT invitation_id FROM internship_invitation WHERE internship_id = ? AND student_user_id = ?',
+      [id, student.user_id]
+    );
 
-    // Use unified scoring
-    const skillScore = computeSkillScore(formattedReqSkills, studentSkillMap);
-    const profileBonus = await computeProfileBonus(student.user_id);
-    const semanticScore = await embeddingService.computeSemanticScore(student.user_id, id);
-
-    let finalScore;
-    if (semanticScore !== null) {
-      finalScore = Math.round(skillScore * 0.65 + semanticScore * 0.20 + profileBonus * 100 * 0.15);
-    } else {
-      finalScore = Math.round(skillScore * 0.80 + profileBonus * 100 * 0.20);
-    }
-
-    if (finalScore >= parseFloat(minScore)) {
-      // Skip students who have already applied — they're tracked through the
-      // applicants page, so showing them as "candidates" is just noise.
-      const [applied] = await pool.execute(
-        "SELECT application_id FROM application WHERE internship_id = ? AND student_user_id = ? AND status != 'withdrawn'",
-        [id, student.user_id]
-      );
-      if (applied.length > 0) continue;
-
-      const [topSkills] = await pool.execute(
-        `SELECT s.display_name, hs.proficiency_level
-         FROM has_skill hs
-         JOIN skill s ON s.skill_id = hs.skill_id
-         WHERE hs.student_user_id = ?
-         ORDER BY FIELD(hs.proficiency_level, 'advanced', 'intermediate', 'beginner')
-         LIMIT 5`,
-        [student.user_id]
-      );
-
-      const [invited] = await pool.execute(
-        'SELECT invitation_id FROM internship_invitation WHERE internship_id = ? AND student_user_id = ?',
-        [id, student.user_id]
-      );
-
-      candidates.push({
-        studentUserId: student.user_id,
-        fullName: student.full_name,
-        email: student.email,
-        profilePicture: student.profile_picture,
-        university: student.university,
-        major: student.major,
-        gpa: student.gpa,
-        graduationYear: student.graduation_year,
-        graduationStatus: student.graduation_year < currentYear ? 'graduated' : 'enrolled',
-        matchScore: finalScore,
-        hasApplied: false,
-        isInvited: invited.length > 0,
-        skills: topSkills.map((sk) => ({
-          displayName: sk.display_name,
-          proficiencyLevel: sk.proficiency_level,
-        })),
-      });
-    }
+    candidates.push({
+      studentUserId: student.user_id,
+      fullName: student.full_name,
+      email: student.email,
+      profilePicture: student.profile_picture,
+      university: student.university,
+      major: student.major,
+      gpa: student.gpa,
+      graduationYear: student.graduation_year,
+      graduationStatus: student.graduation_year < currentYear ? 'graduated' : 'enrolled',
+      matchScore: Math.round(scored.finalScore),
+      matchAlerts: scored.breakdown.alerts || [],
+      hasApplied: false,
+      isInvited: invited.length > 0,
+      skills: topSkills.map((sk) => ({
+        displayName: sk.display_name,
+        proficiencyLevel: sk.proficiency_level,
+      })),
+    });
   }
 
-  // Sort by match score desc
+  // Sort by match score desc, then deadline-asc handled at internship level (not relevant for one internship).
   candidates.sort((a, b) => b.matchScore - a.matchScore);
 
   const total = candidates.length;
@@ -1545,8 +1583,6 @@ const deleteAccount = catchAsync(async (req, res) => {
 
 const getTopCandidates = catchAsync(async (req, res) => {
   const { userId } = req.user;
-  const { computeSkillScore, computeProfileBonus } = require('./internshipController');
-  const embeddingService = require('../utils/embeddingService');
 
   const [internships] = await pool.execute(
     "SELECT internship_id, title FROM internship WHERE employer_user_id = ? AND status = 'active'",
@@ -1557,101 +1593,51 @@ const getTopCandidates = catchAsync(async (req, res) => {
     return res.json({ success: true, data: [] });
   }
 
-  // Get required skills for all active internships
   const iIds = internships.map((i) => i.internship_id);
-  const placeholders = iIds.map(() => '?').join(',');
-  const [allReqSkills] = await pool.execute(
-    `SELECT rs.internship_id, rs.skill_id, rs.required_level, rs.is_mandatory
-     FROM requires_skill rs WHERE rs.internship_id IN (${placeholders})`,
+  const internshipPlaceholders = iIds.map(() => '?').join(',');
+
+  // Pull cached scores across all of this employer's active internships in one
+  // query. Anyone who's already applied is excluded.
+  const [cached] = await pool.execute(
+    `SELECT msc.student_user_id, msc.internship_id, msc.final_score, msc.breakdown,
+            u.full_name, u.profile_picture, s.university, s.major, s.gpa,
+            i.title AS internship_title
+       FROM match_score_cache msc
+       JOIN student   s ON s.user_id = msc.student_user_id
+       JOIN users     u ON u.user_id = s.user_id
+       JOIN internship i ON i.internship_id = msc.internship_id
+      WHERE msc.internship_id IN (${internshipPlaceholders})
+        AND u.is_active = 1
+        AND NOT EXISTS (
+          SELECT 1 FROM application a
+           WHERE a.internship_id = msc.internship_id
+             AND a.student_user_id = msc.student_user_id
+             AND a.status != 'withdrawn'
+        )`,
     iIds.map(String)
   );
 
-  const reqSkillsByInternship = {};
-  for (const rs of allReqSkills) {
-    if (!reqSkillsByInternship[rs.internship_id]) reqSkillsByInternship[rs.internship_id] = [];
-    reqSkillsByInternship[rs.internship_id].push({
-      skillId: rs.skill_id,
-      requiredLevel: rs.required_level,
-      isMandatory: !!rs.is_mandatory,
-    });
-  }
-
-  // Get all active students (limit to avoid performance issues)
-  const [students] = await pool.execute(
-    `SELECT s.user_id, u.full_name, u.profile_picture, s.university, s.major, s.gpa
-     FROM student s
-     JOIN users u ON u.user_id = s.user_id
-     WHERE u.is_active = 1
-     LIMIT 100`
-  );
-
-  // Pre-load all applications by these students to this employer's internships
-  // so we can skip (student, internship) pairs they've already applied to.
-  const studentIds = students.map((s) => s.user_id);
-  const appliedSet = new Set(); // "studentId:internshipId"
-  if (studentIds.length > 0) {
-    const studentPlaceholders = studentIds.map(() => '?').join(',');
-    const [appliedRows] = await pool.execute(
-      `SELECT student_user_id, internship_id FROM application
-       WHERE internship_id IN (${placeholders}) AND student_user_id IN (${studentPlaceholders}) AND status != 'withdrawn'`,
-      [...iIds.map(String), ...studentIds.map(String)]
-    );
-    for (const r of appliedRows) {
-      appliedSet.add(`${r.student_user_id}:${r.internship_id}`);
+  // Best (student, internship) per student.
+  const best = {};
+  for (const row of cached) {
+    const score = Number(row.final_score);
+    const prev = best[row.student_user_id];
+    if (!prev || prev.matchScore < score) {
+      best[row.student_user_id] = {
+        studentUserId: row.student_user_id,
+        fullName: row.full_name,
+        profilePicture: row.profile_picture,
+        university: row.university,
+        major: row.major,
+        gpa: row.gpa,
+        matchedInternship: row.internship_title,
+        matchedInternshipId: row.internship_id,
+        matchScore: Math.round(score),
+      };
     }
   }
 
-  // Find best match per student across all internships
-  const candidateMap = {};
-  for (const student of students) {
-    const [studentSkills] = await pool.execute(
-      'SELECT skill_id, proficiency_level FROM has_skill WHERE student_user_id = ?',
-      [student.user_id]
-    );
-    const studentSkillMap = {};
-    for (const sk of studentSkills) {
-      studentSkillMap[sk.skill_id] = sk.proficiency_level;
-    }
-
-    const profileBonus = await computeProfileBonus(student.user_id);
-
-    for (const intern of internships) {
-      // Skip pairs where the student has already applied — they belong on
-      // the applicants page, not the recommendations strip.
-      if (appliedSet.has(`${student.user_id}:${intern.internship_id}`)) continue;
-
-      const reqSkills = reqSkillsByInternship[intern.internship_id];
-      if (!reqSkills || reqSkills.length === 0) continue;
-
-      const skillScore = computeSkillScore(reqSkills, studentSkillMap);
-      const semanticScore = await embeddingService.computeSemanticScore(student.user_id, intern.internship_id);
-
-      let score;
-      if (semanticScore !== null) {
-        score = Math.round(skillScore * 0.65 + semanticScore * 0.20 + profileBonus * 100 * 0.15);
-      } else {
-        score = Math.round(skillScore * 0.80 + profileBonus * 100 * 0.20);
-      }
-
-      // Keep best match per student
-      if (!candidateMap[student.user_id] || candidateMap[student.user_id].matchScore < score) {
-        candidateMap[student.user_id] = {
-          studentUserId: student.user_id,
-          fullName: student.full_name,
-          profilePicture: student.profile_picture,
-          university: student.university,
-          major: student.major,
-          gpa: student.gpa,
-          matchedInternship: intern.title,
-          matchedInternshipId: intern.internship_id,
-          matchScore: score,
-        };
-      }
-    }
-  }
-
-  // Sort by score, return top 5
-  const top = Object.values(candidateMap)
+  const top = Object.values(best)
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, 5);
 

@@ -304,7 +304,7 @@ const getMe = catchAsync(async (req, res) => {
   if (u.role === 'student') {
     const [rows] = await pool.execute(
       `SELECT major, university, university_start_date, graduation_year, gpa, bio,
-              linkedin_url, github_url, instagram_url, phone, primary_resume_id
+              city, country, linkedin_url, github_url, instagram_url, phone, primary_resume_id
        FROM student WHERE user_id = ?`,
       [userId]
     );
@@ -318,6 +318,8 @@ const getMe = catchAsync(async (req, res) => {
       data.graduationStatus = s.graduation_year < currentYear ? 'graduated' : 'enrolled';
       data.gpa = s.gpa;
       data.bio = s.bio;
+      data.city = s.city;
+      data.country = s.country;
       data.linkedinUrl = s.linkedin_url;
       data.githubUrl = s.github_url;
       data.instagramUrl = s.instagram_url;
@@ -327,7 +329,7 @@ const getMe = catchAsync(async (req, res) => {
   } else if (u.role === 'employer') {
     const [rows] = await pool.execute(
       `SELECT company_name, industry, company_size, company_description, company_logo,
-              website_url, linkedin_url, twitter_url, facebook_url, instagram_url, location
+              website_url, linkedin_url, twitter_url, facebook_url, instagram_url, city, country
        FROM employer WHERE user_id = ?`,
       [userId]
     );
@@ -343,7 +345,8 @@ const getMe = catchAsync(async (req, res) => {
       data.twitterUrl = e.twitter_url;
       data.facebookUrl = e.facebook_url;
       data.instagramUrl = e.instagram_url;
-      data.location = e.location;
+      data.city = e.city;
+      data.country = e.country;
     }
   } else if (u.role === 'admin') {
     const [rows] = await pool.execute(

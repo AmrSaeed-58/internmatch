@@ -4,8 +4,10 @@ const path = require('path');
 const pool = require('../config/db');
 const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
-const embeddingService = require('../utils/embeddingService');
 const { findOrCreateSkill } = require('../utils/skillResolver');
+const matchScoreCache = require('../services/matchScoreCache');
+const { formatLocation } = require('./internshipController');
+const { resolveMajorFields } = require('../config/majorFieldMap');
 
 const BCRYPT_SALT_ROUNDS = 12;
 const uploadDir = process.env.UPLOAD_DIR || './uploads';
@@ -37,7 +39,7 @@ const getProfile = catchAsync(async (req, res) => {
 
   const [studentRows] = await pool.execute(
     `SELECT major, university, university_start_date, graduation_year, gpa, bio,
-            gender, date_of_birth, location,
+            gender, date_of_birth, city, country,
             linkedin_url, github_url, instagram_url, phone, primary_resume_id
      FROM student WHERE user_id = ?`,
     [userId]
@@ -87,7 +89,9 @@ const getProfile = catchAsync(async (req, res) => {
       bio: s.bio,
       gender: s.gender,
       dateOfBirth: s.date_of_birth,
-      location: s.location,
+      city: s.city,
+      country: s.country,
+      location: formatLocation(s.city, s.country),
       linkedinUrl: s.linkedin_url,
       githubUrl: s.github_url,
       instagramUrl: s.instagram_url,
@@ -129,7 +133,8 @@ const updateProfile = catchAsync(async (req, res) => {
       bio: 'bio',
       gender: 'gender',
       dateOfBirth: 'date_of_birth',
-      location: 'location',
+      city: 'city',
+      country: 'country',
       linkedinUrl: 'linkedin_url',
       githubUrl: 'github_url',
       instagramUrl: 'instagram_url',
@@ -157,8 +162,8 @@ const updateProfile = catchAsync(async (req, res) => {
 
     await connection.commit();
 
-    // Fire-and-forget: regenerate student embedding on profile change
-    embeddingService.updateStudentEmbedding(userId).catch(() => {});
+    // Profile change invalidates this student's cached match scores.
+    await matchScoreCache.invalidateForStudent(userId);
 
     res.json({ success: true, message: 'Profile updated successfully' });
   } catch (err) {
@@ -372,8 +377,8 @@ const confirmResume = catchAsync(async (req, res) => {
       }
     }
 
-    // Fire-and-forget: regenerate student embedding after resume replacement
-    embeddingService.updateStudentEmbedding(userId).catch(() => {});
+    // Resume + extracted skills changed — invalidate cached match scores.
+    await matchScoreCache.invalidateForStudent(userId);
 
     res.json({
       success: true,
@@ -472,8 +477,7 @@ const deleteResume = catchAsync(async (req, res) => {
     }
   }
 
-  // Fire-and-forget: regenerate student embedding after resume deletion
-  embeddingService.updateStudentEmbedding(req.user.userId).catch(() => {});
+  await matchScoreCache.invalidateForStudent(req.user.userId);
 
   res.json({ success: true, message: 'Resume deleted' });
 });
@@ -569,7 +573,7 @@ const addSkills = catchAsync(async (req, res) => {
     await connection.commit();
 
     if (added.length > 0) {
-      embeddingService.updateStudentEmbedding(userId).catch(() => {});
+      await matchScoreCache.invalidateForStudent(userId);
     }
 
     res.json({
@@ -601,8 +605,7 @@ const updateSkill = catchAsync(async (req, res) => {
     throw new AppError('Skill not found in your profile', 404);
   }
 
-  // Fire-and-forget: regenerate student embedding after skill update
-  embeddingService.updateStudentEmbedding(userId).catch(() => {});
+  await matchScoreCache.invalidateForStudent(userId);
 
   res.json({ success: true, message: 'Skill updated' });
 });
@@ -620,8 +623,7 @@ const deleteSkill = catchAsync(async (req, res) => {
     throw new AppError('Skill not found in your profile', 404);
   }
 
-  // Fire-and-forget: regenerate student embedding after skill deletion
-  embeddingService.updateStudentEmbedding(userId).catch(() => {});
+  await matchScoreCache.invalidateForStudent(userId);
 
   res.json({ success: true, message: 'Skill removed' });
 });
@@ -1006,7 +1008,7 @@ const getApplications = catchAsync(async (req, res) => {
       a.application_id, a.internship_id, a.status, a.match_score,
       a.cover_letter, a.applied_date, a.status_updated_at,
       a.submitted_resume_filename, a.employer_note,
-      i.title AS internship_title, i.location, i.work_type, i.deadline,
+      i.title AS internship_title, i.city, i.country, i.work_type, i.deadline,
       i.status AS internship_status,
       e.company_name, e.company_logo, e.industry
     FROM application a
@@ -1030,7 +1032,9 @@ const getApplications = catchAsync(async (req, res) => {
     employerNote: r.employer_note,
     internship: {
       title: r.internship_title,
-      location: r.location,
+      city: r.city,
+      country: r.country,
+      location: formatLocation(r.city, r.country),
       workType: r.work_type,
       deadline: r.deadline,
       status: r.internship_status,
@@ -1059,7 +1063,7 @@ const getApplication = catchAsync(async (req, res) => {
       a.cover_letter, a.applied_date, a.status_updated_at,
       a.submitted_resume_filename, a.submitted_resume_path, a.employer_note,
       i.title AS internship_title, i.description AS internship_description,
-      i.location, i.work_type, i.duration_months, i.salary_min, i.salary_max,
+      i.city, i.country, i.work_type, i.duration_months, i.salary_min, i.salary_max,
       i.deadline, i.status AS internship_status, i.created_at AS internship_created_at,
       e.company_name, e.company_logo, e.industry, e.company_size
     FROM application a
@@ -1090,7 +1094,9 @@ const getApplication = catchAsync(async (req, res) => {
       internship: {
         title: r.internship_title,
         description: r.internship_description,
-        location: r.location,
+        city: r.city,
+        country: r.country,
+        location: formatLocation(r.city, r.country),
         workType: r.work_type,
         durationMonths: r.duration_months,
         salaryMin: r.salary_min == null ? null : Number(r.salary_min),
@@ -1193,42 +1199,10 @@ const applyToInternship = catchAsync(async (req, res) => {
     throw new AppError('Application deadline has passed', 400);
   }
 
-  const { computeSkillScore, computeProfileBonus } = require('./internshipController');
-
-  const [requiredSkills] = await pool.execute(
-    `SELECT skill_id, required_level, is_mandatory
-     FROM requires_skill WHERE internship_id = ?`,
-    [String(internshipId)]
-  );
-  const formattedReqSkills = requiredSkills.map((rs) => ({
-    skillId: rs.skill_id,
-    requiredLevel: rs.required_level,
-    isMandatory: !!rs.is_mandatory,
-  }));
-
-  const [studentSkills] = await pool.execute(
-    'SELECT skill_id, proficiency_level FROM has_skill WHERE student_user_id = ?',
-    [String(studentId)]
-  );
-  const studentSkillMap = {};
-  for (const sk of studentSkills) {
-    studentSkillMap[sk.skill_id] = sk.proficiency_level;
-  }
-
-  const profileBonus = await computeProfileBonus(studentId);
-  const semanticScore = await embeddingService.computeSemanticScore(studentId, internshipId);
-
-  let matchScore;
-  if (formattedReqSkills.length === 0) {
-    matchScore = profileBonus * 100;
-  } else {
-    const skillScore = computeSkillScore(formattedReqSkills, studentSkillMap);
-    if (semanticScore !== null) {
-      matchScore = skillScore * 0.65 + semanticScore * 0.20 + profileBonus * 100 * 0.15;
-    } else {
-      matchScore = skillScore * 0.80 + profileBonus * 100 * 0.20;
-    }
-  }
+  // Match score is computed (or fetched from cache) and persisted on the
+  // application row for historical reference.
+  const matchResult = await matchScoreCache.getOrCompute(studentId, internshipId);
+  const matchScore = matchResult ? matchResult.finalScore : null;
 
   const connection = await pool.getConnection();
   let applicationId;
@@ -1400,7 +1374,7 @@ const getBookmarks = catchAsync(async (req, res) => {
 
   const [rows] = await pool.execute(
     `SELECT
-      i.internship_id, i.title, i.location, i.work_type, i.duration_months,
+      i.internship_id, i.title, i.city, i.country, i.work_type, i.duration_months,
       i.salary_min, i.salary_max, i.deadline, i.created_at, i.status,
       e.company_name, e.company_logo, e.industry,
       b.created_at AS bookmarked_at
@@ -1418,7 +1392,9 @@ const getBookmarks = catchAsync(async (req, res) => {
     data: rows.map((r) => ({
       internshipId: r.internship_id,
       title: r.title,
-      location: r.location,
+      city: r.city,
+      country: r.country,
+      location: formatLocation(r.city, r.country),
       workType: r.work_type,
       durationMonths: r.duration_months,
       salaryMin: r.salary_min == null ? null : Number(r.salary_min),
@@ -1466,174 +1442,115 @@ const removeBookmark = catchAsync(async (req, res) => {
 
 const getRecommendations = catchAsync(async (req, res) => {
   const { userId } = req.user;
-  const { page = 1, limit = 20, minScore = 0, scope = 'industry' } = req.query;
+  const { page = 1, limit = 20, minScore = 0 } = req.query;
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
   const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
   const minScoreNum = Math.max(0, Math.min(100, parseInt(minScore, 10) || 0));
 
-  const {
-    computeSkillScore,
-    computeProfileBonus,
-    formatInternshipListItem,
-    deriveIndustryFromMajor,
-  } = require('./internshipController');
+  const { formatInternshipListItem } = require('./internshipController');
 
-  // Resolve student's industry from major when scope=industry (default)
-  let studentIndustry = null;
-  if (scope === 'industry') {
-    const [studentRows] = await pool.execute(
-      'SELECT major FROM student WHERE user_id = ?',
-      [String(userId)]
-    );
-    studentIndustry = studentRows[0] ? deriveIndustryFromMajor(studentRows[0].major) : null;
+  // Resolve student's major -> field mapping. If unknown, recommendations
+  // come back empty; the student can still browse all internships via search.
+  const [studentRows] = await pool.execute(
+    'SELECT major FROM student WHERE user_id = ?',
+    [String(userId)]
+  );
+  const studentMajor = studentRows[0]?.major || null;
+  const fields = resolveMajorFields(studentMajor);
+
+  if (!fields.primary) {
+    return res.json({
+      success: true,
+      data: [],
+      meta: { studentMajor, fields },
+      pagination: { page: pageNum, limit: limitNum, total: 0, totalPages: 0 },
+    });
   }
 
-  // Get all active visible internships, optionally filtered by industry
-  let industryClause = '';
-  const queryParams = [];
-  if (scope === 'industry' && studentIndustry) {
-    industryClause = ' AND e.industry = ?';
-    queryParams.push(studentIndustry);
+  // Field filter + visibility + already-applied exclusion (Stage 1 hard gate).
+  const inFieldIds = await matchScoreCache.listInFieldInternshipIds(userId, studentMajor);
+
+  if (inFieldIds.length === 0) {
+    return res.json({
+      success: true,
+      data: [],
+      meta: { studentMajor, fields },
+      pagination: { page: pageNum, limit: limitNum, total: 0, totalPages: 0 },
+    });
   }
 
+  // Bulk get-or-compute scores via the cache. New (student, internship) pairs
+  // get computed and inserted on first read.
+  const scoreRows = await matchScoreCache.getOrComputeBulk(userId, inFieldIds);
+
+  const filteredIds = scoreRows
+    .filter((r) => Math.round(r.finalScore) >= minScoreNum)
+    .map((r) => r.internship_id);
+
+  if (filteredIds.length === 0) {
+    return res.json({
+      success: true,
+      data: [],
+      meta: { studentMajor, fields },
+      pagination: { page: pageNum, limit: limitNum, total: 0, totalPages: 0 },
+    });
+  }
+
+  const placeholders = filteredIds.map(() => '?').join(',');
   const [internships] = await pool.execute(
     `SELECT
-       i.internship_id, i.title, i.description, i.location,
+       i.internship_id, i.title, i.description, i.city, i.country,
        i.duration_months, i.work_type, i.salary_min, i.salary_max,
        i.deadline, i.created_at,
        e.company_name, e.company_logo, e.industry, e.user_id AS employer_user_id
      FROM internship i
      JOIN employer e ON i.employer_user_id = e.user_id
      JOIN users u_emp ON e.user_id = u_emp.user_id AND u_emp.is_active = TRUE
-     WHERE i.status = 'active'
-       AND (i.deadline IS NULL OR i.deadline >= CURDATE())
-       ${industryClause}
-     ORDER BY i.created_at DESC`,
-    queryParams
+     WHERE i.internship_id IN (${placeholders})`,
+    filteredIds.map(String)
   );
 
-  if (internships.length === 0) {
-    return res.json({
-      success: true,
-      data: [],
-      pagination: { page: pageNum, limit: limitNum, total: 0, totalPages: 0 },
-    });
-  }
-
-  // Batch-fetch required skills for all internships
-  const ids = internships.map((i) => i.internship_id);
-  const placeholders = ids.map(() => '?').join(',');
+  // Attach skills to each internship for the per-card "Why this match?" UI.
   const [allSkills] = await pool.execute(
     `SELECT rs.internship_id, s.skill_id, s.display_name, rs.required_level, rs.is_mandatory
-     FROM requires_skill rs
-     JOIN skill s ON rs.skill_id = s.skill_id
-     WHERE rs.internship_id IN (${placeholders})`,
-    ids.map(String)
+       FROM requires_skill rs
+       JOIN skill s ON rs.skill_id = s.skill_id
+      WHERE rs.internship_id IN (${placeholders})`,
+    filteredIds.map(String)
   );
-
-  const skillMap = {};
+  const skillsByInternship = {};
   for (const sk of allSkills) {
-    if (!skillMap[sk.internship_id]) skillMap[sk.internship_id] = [];
-    skillMap[sk.internship_id].push({
+    if (!skillsByInternship[sk.internship_id]) skillsByInternship[sk.internship_id] = [];
+    skillsByInternship[sk.internship_id].push({
       skillId: sk.skill_id,
       displayName: sk.display_name,
       requiredLevel: sk.required_level,
       isMandatory: !!sk.is_mandatory,
     });
   }
-
   for (const intern of internships) {
-    intern.skills = skillMap[intern.internship_id] || [];
+    intern.skills = skillsByInternship[intern.internship_id] || [];
   }
 
-  const [studentSkills] = await pool.execute(
-    `SELECT hs.skill_id, s.display_name, s.normalized_name, hs.proficiency_level
-     FROM has_skill hs
-     JOIN skill s ON hs.skill_id = s.skill_id
-     WHERE hs.student_user_id = ?`,
-    [String(userId)]
-  );
+  const scoreById = {};
+  for (const r of scoreRows) scoreById[r.internship_id] = r;
 
-  const studentSkillMap = {};
-  for (const sk of studentSkills) {
-    studentSkillMap[sk.skill_id] = sk.proficiency_level;
-  }
-
-  const profileBonus = await computeProfileBonus(userId);
-
-  // Score each internship with full breakdown
-  const scored = [];
-  for (const intern of internships) {
-    const skills = intern.skills || [];
-    let skillScore = 0;
-    let semanticScore = null;
-    let totalScore = 0;
-
-    if (skills.length === 0) {
-      totalScore = Math.round(profileBonus * 20);
-    } else {
-      skillScore = computeSkillScore(skills, studentSkillMap);
-      semanticScore = await embeddingService.computeSemanticScore(userId, intern.internship_id);
-
-      if (semanticScore !== null) {
-        totalScore = Math.round(skillScore * 0.65 + semanticScore * 0.20 + profileBonus * 100 * 0.15);
-      } else {
-        totalScore = Math.round(skillScore * 0.80 + profileBonus * 100 * 0.20);
-      }
-    }
-
-    if (totalScore < minScoreNum) continue;
-
-    // Build skill comparison for "Why this match?"
-    const skillComparison = skills.map((rs) => {
-      const studentLevel = studentSkillMap[rs.skillId] || null;
-      return {
-        skillName: rs.displayName,
-        requiredLevel: rs.requiredLevel,
-        studentLevel,
-        isMandatory: rs.isMandatory,
-        matched: !!studentLevel,
-      };
-    });
-
-    // Generate rule-based semantic insight
-    let semanticInsight = null;
-    if (semanticScore !== null) {
-      const topCategories = [...new Set(studentSkills.slice(0, 3).map((s) => s.display_name))].join(', ');
-      const alignment = semanticScore >= 70 ? 'aligns well with'
-        : semanticScore >= 40 ? 'partially aligns with'
-        : 'does not closely align with';
-      semanticInsight = `Your profile emphasizes ${topCategories || 'your current skills'}, which ${alignment} this ${intern.title} role.`;
-    }
-
-    // Generate improvement tip
-    const missingMandatory = skillComparison.filter((s) => s.isMandatory && !s.matched);
-    const missingOptional = skillComparison.filter((s) => !s.isMandatory && !s.matched);
-    let improvementTip = null;
-    if (missingMandatory.length > 0) {
-      improvementTip = `Adding ${missingMandatory[0].skillName} to your skills would strengthen your match for this role.`;
-    } else if (missingOptional.length > 0) {
-      improvementTip = `You match all mandatory skills! Consider adding ${missingOptional[0].skillName} to strengthen your profile.`;
-    } else if (skills.length > 0) {
-      improvementTip = 'Great match — you have all the skills this internship requires.';
-    }
-
+  const scored = internships.map((intern) => {
+    const result = scoreById[intern.internship_id];
     const formatted = formatInternshipListItem(intern);
-    formatted.matchScore = totalScore;
-    formatted.breakdown = {
-      skillScore: Math.round(skillScore),
-      semanticScore,
-      profileBonus: Math.round(profileBonus * 100),
-    };
-    formatted.skillComparison = skillComparison;
-    formatted.semanticInsight = semanticInsight;
-    formatted.improvementTip = improvementTip;
+    formatted.matchScore = Math.round(result.finalScore);
+    formatted.matchAlerts = result.alerts;
+    formatted.breakdown = result.breakdown;
+    return formatted;
+  });
 
-    scored.push(formatted);
-  }
-
-  // Sort by match score descending
-  scored.sort((a, b) => b.matchScore - a.matchScore);
+  // Sort: score DESC, then deadline ASC (soonest first).
+  scored.sort((a, b) => {
+    if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
+    const da = a.deadline ? new Date(a.deadline).getTime() : Number.MAX_SAFE_INTEGER;
+    const db = b.deadline ? new Date(b.deadline).getTime() : Number.MAX_SAFE_INTEGER;
+    return da - db;
+  });
 
   const total = scored.length;
   const paged = scored.slice((pageNum - 1) * limitNum, (pageNum - 1) * limitNum + limitNum);
@@ -1641,7 +1558,7 @@ const getRecommendations = catchAsync(async (req, res) => {
   res.json({
     success: true,
     data: paged,
-    meta: { scope, studentIndustry },
+    meta: { studentMajor, fields },
     pagination: {
       page: pageNum,
       limit: limitNum,

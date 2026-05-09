@@ -63,7 +63,8 @@ export default function EmployerProfile() {
           industry: d.industry || 'Technology',
           companySize: d.companySize || '1-50',
           companyDescription: d.companyDescription || '',
-          location: d.location || '',
+          city: d.city || '',
+          country: d.country || '',
           websiteUrl: d.websiteUrl || '',
           linkedinUrl: d.linkedinUrl || '',
           twitterUrl: d.twitterUrl || '',
@@ -107,7 +108,8 @@ export default function EmployerProfile() {
         industry: form.industry,
         companySize: form.companySize,
         companyDescription: form.companyDescription || null,
-        location: form.location || null,
+        city: form.city || null,
+        country: form.country || null,
         websiteUrl: form.websiteUrl || null,
         linkedinUrl: form.linkedinUrl || null,
         twitterUrl: form.twitterUrl || null,
@@ -268,10 +270,18 @@ export default function EmployerProfile() {
                 </div>
 
                 <div>
-                  <label className={labelClass}>Location</label>
+                  <label className={labelClass}>City</label>
                   <div className="relative">
                     <MapPin size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none" />
-                    <input name="location" value={form.location} onChange={handleChange} className={`${inputClass} pl-10`} placeholder="City, Country" />
+                    <input name="city" value={form.city} onChange={handleChange} className={`${inputClass} pl-10`} placeholder="Amman" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Country</label>
+                  <div className="relative">
+                    <MapPin size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none" />
+                    <input name="country" value={form.country} onChange={handleChange} className={`${inputClass} pl-10`} placeholder="Jordan" />
                   </div>
                 </div>
 
@@ -364,7 +374,7 @@ export default function EmployerProfile() {
                 <div>
                   <h3 className="font-heading text-xl font-extrabold text-surface-900 dark:text-white tracking-tight">{form.companyName}</h3>
                   <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
-                    {form.industry} · {form.companySize} employees{form.location ? ` · ${form.location}` : ''}
+                    {form.industry} · {form.companySize} employees{(form.city || form.country) ? ` · ${[form.city, form.country].filter(Boolean).join(', ')}` : ''}
                   </p>
                   <div className="flex gap-3 mt-3">
                     {form.websiteUrl && (

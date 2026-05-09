@@ -135,7 +135,7 @@ const getUserById = catchAsync(async (req, res) => {
   if (user.role === 'student') {
     const [[student]] = await pool.query(
       `SELECT university, major, gpa, graduation_year, bio,
-              linkedin_url, github_url, instagram_url, phone, location
+              linkedin_url, github_url, instagram_url, phone, city, country
        FROM student WHERE user_id = ?`,
       [id]
     );
@@ -143,7 +143,7 @@ const getUserById = catchAsync(async (req, res) => {
   } else if (user.role === 'employer') {
     const [[employer]] = await pool.query(
       `SELECT company_name, industry, company_size, website_url,
-              company_description, company_logo, location
+              company_description, company_logo, city, country
        FROM employer WHERE user_id = ?`,
       [id]
     );
@@ -396,10 +396,6 @@ const approveInternship = catchAsync(async (req, res) => {
     );
 
     await conn.commit();
-
-    // Fire-and-forget: generate internship embedding on approval
-    const embeddingService = require('../utils/embeddingService');
-    embeddingService.updateInternshipEmbedding(id).catch(() => {});
 
     res.json({ success: true, message: 'Internship approved' });
   } catch (err) {

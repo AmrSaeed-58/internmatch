@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   XCircle,
   Building2,
   Users,
@@ -356,6 +357,7 @@ export default function InternshipDetailPage() {
             matchScore: d.matchScore ?? null,
             skillComparison: d.skillComparison,
             matchBreakdown: d.matchBreakdown,
+            matchAlerts: d.matchAlerts || [],
             applicantCount: d.applicantCount ?? 0,
             isBookmarked: d.isBookmarked ?? false,
             hasApplied: d.hasApplied ?? false,
@@ -466,9 +468,15 @@ export default function InternshipDetailPage() {
   const totalSkills = skillsWithStatus.length || 1;
 
   const breakdown = internship.matchBreakdown || {};
-  const skillScore = breakdown.skillScore ?? (internship.matchScore ? internship.matchScore * 0.65 : 0);
-  const semanticScore = breakdown.semanticScore ?? (internship.matchScore ? internship.matchScore * 0.20 : 0);
-  const profileBonus = breakdown.profileBonus != null ? breakdown.profileBonus * 0.15 : (internship.matchScore ? internship.matchScore * 0.15 : 0);
+  const breakdownRows = [
+    { key: 'mandatory', label: 'Mandatory skills', weight: 60, score: breakdown.mandatory?.score, color: 'from-primary-500 to-primary-700' },
+    { key: 'optional',  label: 'Optional skills',  weight: 10, score: breakdown.optional?.score,  color: 'from-accent-400 to-accent-600' },
+    { key: 'major',     label: 'Major fit',        weight: 10, score: breakdown.major?.score,     color: 'from-violet-400 to-violet-600' },
+    { key: 'gpa',       label: 'GPA fit',          weight: 10, score: breakdown.gpa?.score,       color: 'from-cta-400 to-cta-600' },
+    { key: 'location',  label: 'Location fit',     weight: 10, score: breakdown.location?.score,  color: 'from-emerald-400 to-emerald-600' },
+  ];
+  const matchAlerts = internship.matchAlerts || [];
+  const bindingCap = breakdown.bindingCap;
 
   const descParagraphs = (internship.description || '').split('\n').filter(Boolean);
 
@@ -603,7 +611,7 @@ export default function InternshipDetailPage() {
                       {internship.matchScore >= 80 ? 'Excellent fit' : internship.matchScore >= 60 ? 'Strong fit' : internship.matchScore >= 40 ? 'Partial fit' : 'Low fit'}
                     </p>
                     <p className="text-xs text-primary-100/80 mt-1 leading-relaxed">
-                      Based on your skills, profile, and semantic similarity.
+                      Based on skills, major, GPA, and location.
                     </p>
                   </div>
                 </motion.div>
@@ -849,26 +857,50 @@ export default function InternshipDetailPage() {
                     </h3>
                   </div>
                   <div className="flex flex-col gap-4">
-                    {[
-                      { label: 'Skills', weight: '65%', value: Math.round(skillScore), max: 65, color: 'from-primary-500 to-primary-700' },
-                      { label: 'Semantic', weight: '20%', value: Math.round(semanticScore), max: 20, color: 'from-accent-400 to-accent-600' },
-                      { label: 'Profile', weight: '15%', value: Math.round(profileBonus), max: 15, color: 'from-cta-400 to-cta-600' },
-                    ].map(({ label, weight, value, max, color }) => (
-                      <div key={label}>
-                        <div className="flex justify-between items-baseline text-xs mb-1.5">
-                          <span className="font-semibold text-surface-700 dark:text-surface-300">
-                            {label} <span className="text-surface-400 dark:text-surface-500 font-normal">· {weight}</span>
-                          </span>
-                          <span className="font-bold text-surface-900 dark:text-white">{value}<span className="text-surface-400 dark:text-surface-500 font-normal">/{max}</span></span>
+                    {breakdownRows.map(({ key, label, weight, score, color }) => {
+                      const value = score == null ? 0 : Math.round(score);
+                      return (
+                        <div key={key}>
+                          <div className="flex justify-between items-baseline text-xs mb-1.5">
+                            <span className="font-semibold text-surface-700 dark:text-surface-300">
+                              {label} <span className="text-surface-400 dark:text-surface-500 font-normal">· {weight}%</span>
+                            </span>
+                            <span className="font-bold text-surface-900 dark:text-white">
+                              {value}<span className="text-surface-400 dark:text-surface-500 font-normal">/{weight}</span>
+                            </span>
+                          </div>
+                          <div className="h-1.5 bg-surface-100 dark:bg-surface-800 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full bg-gradient-to-r ${color}`}
+                              style={{ width: `${Math.min(100, (value / weight) * 100)}%`, transition: 'width 700ms cubic-bezier(0.16,1,0.3,1)' }}
+                            />
+                          </div>
                         </div>
-                        <div className="h-1.5 bg-surface-100 dark:bg-surface-800 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full bg-gradient-to-r ${color}`}
-                            style={{ width: `${Math.min(100, (value / max) * 100)}%`, transition: 'width 700ms cubic-bezier(0.16,1,0.3,1)' }}
-                          />
-                        </div>
+                      );
+                    })}
+                    {bindingCap && (
+                      <div className="mt-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200/60 dark:ring-amber-800/40 text-[11px] text-amber-800 dark:text-amber-300">
+                        <span className="font-bold">Score capped at {bindingCap.value}.</span>{' '}
+                        {bindingCap.reason === 'sole_mandatory_skill_missing' && 'The only required skill is missing.'}
+                        {bindingCap.reason === 'half_mandatory_skills_missing' && 'Half of the mandatory skills are missing.'}
+                        {bindingCap.reason === 'majority_mandatory_skills_missing' && 'Most of the mandatory skills are missing.'}
+                        {bindingCap.reason === 'multiple_mandatory_skills_missing' && 'Several mandatory skills are missing.'}
+                        {bindingCap.reason === 'country_mismatch' && 'You are in a different country than this internship.'}
                       </div>
-                    ))}
+                    )}
+                    {matchAlerts.length > 0 && (
+                      <div className="flex flex-col gap-1.5 mt-1">
+                        {matchAlerts.map((msg, i) => (
+                          <div
+                            key={i}
+                            className="flex items-start gap-1.5 px-2.5 py-2 rounded-lg text-[11px] font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 ring-1 ring-amber-200/60 dark:ring-amber-800/40"
+                          >
+                            <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                            <span>{msg}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}

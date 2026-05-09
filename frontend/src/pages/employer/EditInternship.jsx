@@ -41,11 +41,13 @@ export default function EditInternship() {
   const [form, setForm] = useState({
     title: '',
     description: '',
-    location: '',
+    city: '',
+    country: '',
     workType: 'on-site',
     durationMonths: '',
     salaryMin: '',
     salaryMax: '',
+    minimumGpa: '',
     deadline: '',
   });
 
@@ -70,11 +72,13 @@ export default function EditInternship() {
         setForm({
           title: data.title || '',
           description: data.description || '',
-          location: data.location || '',
+          city: data.city || '',
+          country: data.country || '',
           workType: data.workType || 'on-site',
           durationMonths: data.durationMonths || '',
           salaryMin: data.salaryMin ?? '',
           salaryMax: data.salaryMax ?? '',
+          minimumGpa: data.minimumGpa ?? '',
           deadline: data.deadline ? data.deadline.split('T')[0] : '',
         });
         setSkills(
@@ -216,7 +220,8 @@ export default function EditInternship() {
     const e = {};
     if (!form.title.trim()) e.title = 'Required';
     if (!form.description.trim()) e.description = 'Required';
-    if (!form.location.trim()) e.location = 'Required';
+    if (!form.city.trim()) e.city = 'Required';
+    if (!form.country.trim()) e.country = 'Required';
     if (!form.durationMonths) e.durationMonths = 'Required';
     if (form.deadline) {
       const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -225,7 +230,14 @@ export default function EditInternship() {
     if (form.salaryMin && form.salaryMax && parseFloat(form.salaryMax) < parseFloat(form.salaryMin)) {
       e.salaryMax = 'Maximum salary cannot be lower than minimum';
     }
+    if (form.minimumGpa) {
+      const g = parseFloat(form.minimumGpa);
+      if (Number.isNaN(g) || g < 0 || g > 4) e.minimumGpa = 'Minimum GPA must be between 0.00 and 4.00';
+    }
     if (skills.length === 0) e.skills = 'At least one skill is required';
+    if (skills.length > 0 && skills.every((s) => !s.isMandatory)) {
+      e.skills = 'At least one skill must be marked mandatory';
+    }
     return e;
   }
 
@@ -248,6 +260,7 @@ export default function EditInternship() {
         durationMonths: parseInt(form.durationMonths),
         salaryMin: form.salaryMin !== '' ? parseFloat(form.salaryMin) : null,
         salaryMax: form.salaryMax !== '' ? parseFloat(form.salaryMax) : null,
+        minimumGpa: form.minimumGpa !== '' ? parseFloat(form.minimumGpa) : null,
         deadline: form.deadline || null,
         skills: skills.map((s) => ({
           skillId: typeof s.skillId === 'string' && s.skillId.startsWith('custom-') ? undefined : s.skillId,
@@ -391,19 +404,33 @@ export default function EditInternship() {
                   {errors.description && <p className={errorClass}><AlertCircle size={11} />{errors.description}</p>}
                 </div>
 
-                <div className="grid sm:grid-cols-2 gap-4">
+                <div className="grid sm:grid-cols-3 gap-4">
                   <div>
-                    <label className={labelClass}>Location *</label>
+                    <label className={labelClass}>City *</label>
                     <div className="relative">
                       <MapPin size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none" />
                       <input
-                        name="location"
-                        value={form.location}
+                        name="city"
+                        value={form.city}
                         onChange={handleChange}
-                        className={`${inputClass} pl-10 ${errors.location ? 'border-red-400 focus:ring-red-400/30' : ''}`}
+                        className={`${inputClass} pl-10 ${errors.city ? 'border-red-400 focus:ring-red-400/30' : ''}`}
                       />
                     </div>
-                    {errors.location && <p className={errorClass}><AlertCircle size={11} />{errors.location}</p>}
+                    {errors.city && <p className={errorClass}><AlertCircle size={11} />{errors.city}</p>}
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Country *</label>
+                    <div className="relative">
+                      <MapPin size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none" />
+                      <input
+                        name="country"
+                        value={form.country}
+                        onChange={handleChange}
+                        className={`${inputClass} pl-10 ${errors.country ? 'border-red-400 focus:ring-red-400/30' : ''}`}
+                      />
+                    </div>
+                    {errors.country && <p className={errorClass}><AlertCircle size={11} />{errors.country}</p>}
                   </div>
 
                   <div>
@@ -455,14 +482,31 @@ export default function EditInternship() {
                   </div>
                 </div>
 
-                <div>
-                  <label className={labelClass}>Application Deadline</label>
-                  <div className="relative">
-                    <Calendar size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none" />
-                    <input name="deadline" type="date" min={minDeadline} value={form.deadline} onChange={handleChange}
-                      className={`${inputClass} pl-10 ${errors.deadline ? 'border-red-400 focus:ring-red-400/30' : ''}`} />
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>Application Deadline</label>
+                    <div className="relative">
+                      <Calendar size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none" />
+                      <input name="deadline" type="date" min={minDeadline} value={form.deadline} onChange={handleChange}
+                        className={`${inputClass} pl-10 ${errors.deadline ? 'border-red-400 focus:ring-red-400/30' : ''}`} />
+                    </div>
+                    {errors.deadline && <p className={errorClass}><AlertCircle size={11} />{errors.deadline}</p>}
                   </div>
-                  {errors.deadline && <p className={errorClass}><AlertCircle size={11} />{errors.deadline}</p>}
+                  <div>
+                    <label className={labelClass}>Minimum GPA</label>
+                    <input
+                      name="minimumGpa"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="4"
+                      value={form.minimumGpa}
+                      onChange={handleChange}
+                      className={`${inputClass} ${errors.minimumGpa ? 'border-red-400 focus:ring-red-400/30' : ''}`}
+                      placeholder="optional (e.g. 3.00)"
+                    />
+                    {errors.minimumGpa && <p className={errorClass}><AlertCircle size={11} />{errors.minimumGpa}</p>}
+                  </div>
                 </div>
               </div>
             </div>

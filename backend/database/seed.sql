@@ -11,6 +11,11 @@
 --   every seeded account         Test@1234
 
 SET NAMES utf8mb4;
+-- MySQL Workbench runs with safe-updates by default, which blocks any UPDATE
+-- whose WHERE clause doesn't filter on a key column. Several seed UPDATEs
+-- intentionally filter on non-key columns (e.g. WHERE primary_resume_id IS NULL),
+-- so disable safe-updates for the duration of this script.
+SET SQL_SAFE_UPDATES = 0;
 
 SET @test_pw = '$2a$12$so4aZC2Fgc7eYvRByIUr3.MBJskiPnv3p5VatBrm6WqGdM8ditMQy';
 
@@ -234,55 +239,66 @@ VALUES
   ('Nour Haddad',   'nour@brightbank.jo',  @test_pw, 'employer', 1, 0),
   ('Omar Mansour',  'omar@carebridge.jo',  @test_pw, 'employer', 1, 0),
   ('Rania Nasser',  'rania@edubridge.jo',  @test_pw, 'employer', 1, 0),
-  ('Kareem Haddad', 'kareem@buildright.jo', @test_pw, 'employer', 1, 0);
+  ('Kareem Haddad', 'kareem@buildright.jo', @test_pw, 'employer', 1, 0),
+  -- Foreign-country employer for testing the country-mismatch cap.
+  ('Sami Khalil',   'sami@globaltech.ae',  @test_pw, 'employer', 1, 0);
 
-INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, location)
+INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, city, country)
 SELECT user_id, 'TechCorp Solutions', 'Technology', '51-200', 'https://techcorp.example.com',
        'TechCorp Solutions is a leading software company in Amman specializing in enterprise SaaS products. We build tools that help businesses streamline operations and improve productivity.',
-       'Amman, Jordan'
+       'Amman', 'Jordan'
 FROM users WHERE email = 'sarah@techcorp.jo';
 
-INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, location)
+INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, city, country)
 SELECT user_id, 'DataFlow Analytics', 'Technology', '1-50', 'https://dataflow.example.com',
        'DataFlow Analytics helps companies harness the power of their data through machine learning and advanced analytics solutions.',
-       'Amman, Jordan'
+       'Amman', 'Jordan'
 FROM users WHERE email = 'mahmoud@dataflow.jo';
 
-INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, location)
+INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, city, country)
 SELECT user_id, 'DesignHub Creative', 'Marketing', '1-50', 'https://designhub.example.com',
        'DesignHub Creative is a boutique design and brand agency creating digital experiences for startups and established brands across the MENA region.',
-       'Irbid, Jordan'
+       'Irbid', 'Jordan'
 FROM users WHERE email = 'lana@designhub.jo';
 
-INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, location)
+INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, city, country)
 SELECT user_id, 'BrightBank Labs', 'Finance', '201-500', 'https://brightbank.example.com',
        'BrightBank Labs builds digital banking products, reporting tools, and customer analytics for modern financial services teams.',
-       'Amman, Jordan'
+       'Amman', 'Jordan'
 FROM users WHERE email = 'nour@brightbank.jo';
 
-INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, location)
+INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, city, country)
 SELECT user_id, 'CareBridge Health', 'Healthcare', '51-200', 'https://carebridge.example.com',
        'CareBridge Health develops patient engagement and health informatics tools for clinics, hospitals, and care providers.',
-       'Amman, Jordan'
+       'Amman', 'Jordan'
 FROM users WHERE email = 'omar@carebridge.jo';
 
-INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, location)
+INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, city, country)
 SELECT user_id, 'EduBridge Learning', 'Education', '1-50', 'https://edubridge.example.com',
        'EduBridge Learning creates online courses, learning analytics, and digital classroom experiences for schools and training teams.',
-       'Amman, Jordan'
+       'Amman', 'Jordan'
 FROM users WHERE email = 'rania@edubridge.jo';
 
-INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, location)
+INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, city, country)
 SELECT user_id, 'BuildRight Engineering', 'Engineering', '500+', 'https://buildright.example.com',
        'BuildRight Engineering manages infrastructure, civil engineering, and construction technology projects across Jordan.',
-       'Aqaba, Jordan'
+       'Aqaba', 'Jordan'
 FROM users WHERE email = 'kareem@buildright.jo';
+
+-- Foreign-country tech employer (UAE) — used to exercise the matching engine's
+-- country-mismatch cap (final_score ≤ 50 + alert) for hybrid/onsite postings.
+INSERT IGNORE INTO employer (user_id, company_name, industry, company_size, website_url, company_description, city, country)
+SELECT user_id, 'GlobalTech UAE', 'Technology', '201-500', 'https://globaltech.example.com',
+       'GlobalTech UAE is a regional software company building platforms used across the GCC and the wider Middle East.',
+       'Dubai', 'UAE'
+FROM users WHERE email = 'sami@globaltech.ae';
 
 INSERT IGNORE INTO notification_preference (user_id)
 SELECT user_id FROM users
 WHERE email IN (
   'sarah@techcorp.jo', 'mahmoud@dataflow.jo', 'lana@designhub.jo',
-  'nour@brightbank.jo', 'omar@carebridge.jo', 'rania@edubridge.jo', 'kareem@buildright.jo'
+  'nour@brightbank.jo', 'omar@carebridge.jo', 'rania@edubridge.jo', 'kareem@buildright.jo',
+  'sami@globaltech.ae'
 );
 
 -- =============================================================================
@@ -301,67 +317,67 @@ VALUES
   ('Dina Awad',     'dina@petra.edu.jo', @test_pw, 'student', 1, 0),
   ('Zaid Hassan',   'zaid@just.edu.jo',  @test_pw, 'student', 1, 0);
 
-INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, phone, linkedin_url, github_url, location)
+INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, phone, linkedin_url, github_url, city, country)
 SELECT user_id,
        'Computer Science', 'Princess Sumaya University for Technology', 2026, 3.85,
        'Passionate full-stack developer with experience in React, Node.js, and cloud technologies. Looking for opportunities to build impactful products.',
-       '+962-79-555-0101', 'https://linkedin.com/in/alexrivera', 'https://github.com/alexrivera', 'Amman, Jordan'
+       '+962-79-555-0101', 'https://linkedin.com/in/alexrivera', 'https://github.com/alexrivera', 'Amman', 'Jordan'
 FROM users WHERE email = 'alex@psut.edu.jo';
 
-INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, phone, linkedin_url, location)
+INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, phone, linkedin_url, city, country)
 SELECT user_id,
        'Data Science', 'Jordan University of Science and Technology', 2025, 3.72,
        'Data science enthusiast skilled in Python, machine learning, and statistical analysis. Experience with real-world datasets and predictive modeling.',
-       '+962-79-555-0102', 'https://linkedin.com/in/jordanlee', 'Irbid, Jordan'
+       '+962-79-555-0102', 'https://linkedin.com/in/jordanlee', 'Irbid', 'Jordan'
 FROM users WHERE email = 'jordan@just.edu.jo';
 
-INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, github_url, location)
+INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, github_url, city, country)
 SELECT user_id,
        'Graphic Design', 'University of Jordan', 2027, 3.50,
        'Creative designer with a strong eye for aesthetics and user experience. Proficient in Figma, Adobe Suite, and modern web design principles.',
-       'https://github.com/taylorsmith', 'Amman, Jordan'
+       'https://github.com/taylorsmith', 'Amman', 'Jordan'
 FROM users WHERE email = 'taylor@uj.edu.jo';
 
-INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, location)
+INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, city, country)
 SELECT user_id,
        'Software Engineering', 'German Jordanian University', 2026, 3.90,
        'Backend-focused engineer interested in distributed systems, databases, and API design. Strong algorithmic skills from competitive programming.',
-       'Amman, Jordan'
+       'Amman', 'Jordan'
 FROM users WHERE email = 'morgan@gju.edu.jo';
 
-INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, phone, linkedin_url, location)
+INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, phone, linkedin_url, city, country)
 SELECT user_id,
        'Finance', 'University of Jordan', 2026, 3.68,
        'Finance student interested in fintech, risk analysis, and business intelligence. Comfortable with Excel, SQL, and dashboard storytelling.',
-       '+962-79-555-0105', 'https://linkedin.com/in/samiranasser', 'Amman, Jordan'
+       '+962-79-555-0105', 'https://linkedin.com/in/samiranasser', 'Amman', 'Jordan'
 FROM users WHERE email = 'samira@uj.edu.jo';
 
-INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, github_url, location)
+INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, github_url, city, country)
 SELECT user_id,
        'Computer Engineering', 'Yarmouk University', 2025, 3.44,
        'Computer engineering student who enjoys mobile apps, embedded systems, QA automation, and practical software testing.',
-       'https://github.com/omarhaddad', 'Irbid, Jordan'
+       'https://github.com/omarhaddad', 'Irbid', 'Jordan'
 FROM users WHERE email = 'omar@yarmouk.edu.jo';
 
-INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, phone, location)
+INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, phone, city, country)
 SELECT user_id,
        'Public Health', 'The Hashemite University', 2027, 3.81,
        'Public health student focused on digital health, patient education, and data-informed healthcare operations.',
-       '+962-79-555-0107', 'Zarqa, Jordan'
+       '+962-79-555-0107', 'Zarqa', 'Jordan'
 FROM users WHERE email = 'leen@hu.edu.jo';
 
-INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, linkedin_url, location)
+INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, linkedin_url, city, country)
 SELECT user_id,
        'Marketing', 'Petra University', 2026, 3.59,
        'Marketing student with experience in content planning, social campaigns, brand research, and basic analytics.',
-       'https://linkedin.com/in/dinaawad', 'Amman, Jordan'
+       'https://linkedin.com/in/dinaawad', 'Amman', 'Jordan'
 FROM users WHERE email = 'dina@petra.edu.jo';
 
-INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, github_url, location)
+INSERT IGNORE INTO student (user_id, major, university, graduation_year, gpa, bio, github_url, city, country)
 SELECT user_id,
        'Electrical Engineering', 'Jordan University of Science and Technology', 2025, 3.63,
        'Electrical engineering student interested in project delivery, site coordination, IoT, and infrastructure systems.',
-       'https://github.com/zaidhassan', 'Irbid, Jordan'
+       'https://github.com/zaidhassan', 'Irbid', 'Jordan'
 FROM users WHERE email = 'zaid@just.edu.jo';
 
 INSERT IGNORE INTO notification_preference (user_id)
@@ -532,150 +548,169 @@ WHERE u.email = 'zaid@just.edu.jo' AND s.normalized_name IN ('iot','research','p
 -- 6. Test internships (active, approved). Salaries in JOD.
 -- =============================================================================
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'Full-Stack Developer Intern',
        'Join our engineering team to build and maintain web applications using React and Node.js. You will work on real customer-facing features, participate in code reviews, and collaborate with senior engineers.\n\nResponsibilities:\n- Develop frontend components with React and TypeScript\n- Build RESTful APIs with Node.js and Express\n- Write unit and integration tests\n- Participate in agile ceremonies and sprint planning',
-       'Amman, Jordan', 'hybrid', 3, 400, 700,
+       'Amman', 'Jordan', 'hybrid', 3, 400, 700,
        DATE_ADD(CURDATE(), INTERVAL 45 DAY), 'active'
 FROM users WHERE email = 'sarah@techcorp.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Full-Stack Developer Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'Backend Engineering Intern',
        'Work on our backend microservices architecture. You will help design and implement APIs, optimize database queries, and improve system reliability.\n\nRequirements:\n- Strong foundation in Java or Python\n- Understanding of relational databases\n- Familiarity with cloud services (AWS preferred)\n- Good communication skills',
-       'Amman, Jordan', 'on-site', 6, 500, 800,
+       'Amman', 'Jordan', 'on-site', 6, 500, 800,
        DATE_ADD(CURDATE(), INTERVAL 30 DAY), 'active'
 FROM users WHERE email = 'sarah@techcorp.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Backend Engineering Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'Data Science Intern',
        'Help our data team build predictive models and analyze large datasets. You will work with Python, TensorFlow, and SQL to derive insights that drive product decisions.\n\nWhat you will do:\n- Clean and preprocess datasets\n- Build and evaluate ML models\n- Create data visualizations and dashboards\n- Present findings to stakeholders',
-       'Remote', 'remote', 3, 350, 600,
+       'Remote', 'Jordan', 'remote', 3, 350, 600,
        DATE_ADD(CURDATE(), INTERVAL 60 DAY), 'active'
 FROM users WHERE email = 'mahmoud@dataflow.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Data Science Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'Machine Learning Engineer Intern',
        'Join our AI research team to develop and deploy machine learning models. You will work on NLP and computer vision projects using PyTorch and TensorFlow.\n\nIdeal candidate:\n- Strong Python programming skills\n- Experience with deep learning frameworks\n- Understanding of linear algebra and statistics\n- Interest in production ML systems',
-       'Amman, Jordan', 'hybrid', 6, 600, 900,
+       'Amman', 'Jordan', 'hybrid', 6, 600, 900,
        DATE_ADD(CURDATE(), INTERVAL 40 DAY), 'active'
 FROM users WHERE email = 'mahmoud@dataflow.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Machine Learning Engineer Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'UI/UX Design Intern',
        'Create beautiful and intuitive user interfaces for our clients. You will conduct user research, create wireframes, and deliver high-fidelity designs in Figma.\n\nYour responsibilities:\n- Conduct user interviews and usability testing\n- Create wireframes and interactive prototypes\n- Design responsive layouts for web and mobile\n- Collaborate with developers on implementation',
-       'Irbid, Jordan', 'remote', 3, 300, 500,
+       'Irbid', 'Jordan', 'remote', 3, 300, 500,
        DATE_ADD(CURDATE(), INTERVAL 50 DAY), 'active'
 FROM users WHERE email = 'lana@designhub.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'UI/UX Design Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'Frontend Developer Intern',
        'Build pixel-perfect web interfaces using modern frontend technologies. You will translate Figma designs into responsive React components with Tailwind CSS.\n\nWe are looking for:\n- Solid HTML/CSS fundamentals\n- Experience with React or similar framework\n- Eye for design and attention to detail\n- Portfolio of web projects',
-       'Irbid, Jordan', 'hybrid', 4, 350, 600,
+       'Irbid', 'Jordan', 'hybrid', 4, 350, 600,
        DATE_ADD(CURDATE(), INTERVAL 35 DAY), 'active'
 FROM users WHERE email = 'lana@designhub.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Frontend Developer Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'QA Automation Intern',
        'Help the engineering team build reliable test coverage for web and API releases. You will write test cases, automate regression checks, and report issues clearly to product teams.\n\nYou will practice:\n- API and UI testing workflows\n- Regression planning and bug reports\n- JavaScript-based automation\n- Working closely with developers during releases',
-       'Amman, Jordan', 'hybrid', 3, 300, 500,
+       'Amman', 'Jordan', 'hybrid', 3, 300, 500,
        DATE_ADD(CURDATE(), INTERVAL 28 DAY), 'active'
 FROM users WHERE email = 'sarah@techcorp.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'QA Automation Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'Business Intelligence Intern',
        'Turn raw operational data into useful dashboards and weekly insights. You will clean datasets, write SQL, and create reports for product and sales teams.\n\nResponsibilities:\n- Build SQL queries for recurring reports\n- Prepare dashboards in Power BI or Tableau\n- Summarize trends for non-technical stakeholders\n- Help maintain reporting documentation',
-       'Remote', 'remote', 4, 350, 650,
+       'Remote', 'Jordan', 'remote', 4, 350, 650,
        DATE_ADD(CURDATE(), INTERVAL 42 DAY), 'active'
 FROM users WHERE email = 'mahmoud@dataflow.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Business Intelligence Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'Digital Marketing Intern',
        'Support campaign planning, content calendars, and performance reporting for regional clients. You will write briefs, draft social copy, and review campaign analytics.\n\nResponsibilities:\n- Create content calendars and campaign briefs\n- Review social media analytics\n- Coordinate with designers and account managers\n- Prepare weekly performance summaries',
-       'Amman, Jordan', 'hybrid', 3, 250, 450,
+       'Amman', 'Jordan', 'hybrid', 3, 250, 450,
        DATE_ADD(CURDATE(), INTERVAL 38 DAY), 'active'
 FROM users WHERE email = 'lana@designhub.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Digital Marketing Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'Financial Analyst Intern',
        'Join a fintech analytics team to support financial reporting, risk summaries, and internal dashboards. This role is ideal for finance students who enjoy structured analysis.\n\nResponsibilities:\n- Prepare spreadsheet and SQL-based reports\n- Review transaction trends and anomalies\n- Support risk and compliance documentation\n- Present findings to business stakeholders',
-       'Amman, Jordan', 'on-site', 6, 450, 750,
+       'Amman', 'Jordan', 'on-site', 6, 450, 750,
        DATE_ADD(CURDATE(), INTERVAL 55 DAY), 'active'
 FROM users WHERE email = 'nour@brightbank.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Financial Analyst Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'Health Informatics Intern',
        'Help organize patient education content and operational health data for digital care programs. You will support research, reporting, and accessibility reviews.\n\nResponsibilities:\n- Review health education material for clarity\n- Analyze basic operational datasets\n- Support patient communication workflows\n- Document insights for care managers',
-       'Amman, Jordan', 'hybrid', 4, 350, 550,
+       'Amman', 'Jordan', 'hybrid', 4, 350, 550,
        DATE_ADD(CURDATE(), INTERVAL 47 DAY), 'active'
 FROM users WHERE email = 'omar@carebridge.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Health Informatics Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'Education Technology Content Intern',
        'Work with curriculum and product teams to create digital learning material, review course engagement data, and improve learner experience.\n\nResponsibilities:\n- Draft lesson summaries and learner guides\n- Review analytics for course completion\n- Help organize content in the learning platform\n- Support accessibility and readability checks',
-       'Remote', 'remote', 3, 250, 450,
+       'Remote', 'Jordan', 'remote', 3, 250, 450,
        DATE_ADD(CURDATE(), INTERVAL 33 DAY), 'active'
 FROM users WHERE email = 'rania@edubridge.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Education Technology Content Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'Civil Engineering Project Intern',
        'Support project engineers with site coordination, documentation, and progress tracking for infrastructure projects. You will learn how engineering plans become field execution.\n\nResponsibilities:\n- Assist with project documentation\n- Track site progress and issue logs\n- Coordinate with engineering and operations teams\n- Prepare weekly project summaries',
-       'Aqaba, Jordan', 'on-site', 6, 400, 650,
+       'Aqaba', 'Jordan', 'on-site', 6, 400, 650,
        DATE_ADD(CURDATE(), INTERVAL 25 DAY), 'active'
 FROM users WHERE email = 'kareem@buildright.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Civil Engineering Project Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'Mobile App Developer Intern',
        'Build and polish cross-platform mobile features for student-facing products. This posting is intentionally pending approval so admin review screens have realistic test data.',
-       'Amman, Jordan', 'hybrid', 4, 350, 650,
+       'Amman', 'Jordan', 'hybrid', 4, 350, 650,
        DATE_ADD(CURDATE(), INTERVAL 52 DAY), 'pending_approval'
 FROM users WHERE email = 'sarah@techcorp.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Mobile App Developer Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status, admin_review_note)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status, admin_review_note)
 SELECT user_id,
        'Social Media Strategy Intern',
        'Draft campaign strategy and social content for several client accounts. This rejected posting is seeded to test employer resubmission and admin rejection notes.',
-       'Irbid, Jordan', 'remote', 3, 200, 350,
+       'Irbid', 'Jordan', 'remote', 3, 200, 350,
        DATE_ADD(CURDATE(), INTERVAL 20 DAY), 'rejected',
        'Please add clearer responsibilities, expected weekly hours, and portfolio requirements before resubmitting.'
 FROM users WHERE email = 'lana@designhub.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Social Media Strategy Intern' AND employer_user_id = users.user_id);
 
-INSERT INTO internship (employer_user_id, title, description, location, work_type, duration_months, salary_min, salary_max, deadline, status)
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'Cloud DevOps Intern',
        'Support infrastructure automation and deployment monitoring for internal platforms. This closed posting is seeded for employer history and analytics testing.',
-       'Amman, Jordan', 'hybrid', 3, 500, 800,
+       'Amman', 'Jordan', 'hybrid', 3, 500, 800,
        DATE_SUB(CURDATE(), INTERVAL 10 DAY), 'closed'
 FROM users WHERE email = 'sarah@techcorp.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Cloud DevOps Intern' AND employer_user_id = users.user_id);
+
+-- =============================================================================
+-- 6b. Sample minimum_gpa values on a few internships (most stay NULL = no min).
+-- =============================================================================
+
+UPDATE internship
+   SET minimum_gpa = 3.00
+ WHERE title = 'Backend Engineering Intern'
+   AND employer_user_id = (SELECT user_id FROM users WHERE email = 'sarah@techcorp.jo');
+
+UPDATE internship
+   SET minimum_gpa = 3.50
+ WHERE title = 'Machine Learning Engineer Intern'
+   AND employer_user_id = (SELECT user_id FROM users WHERE email = 'mahmoud@dataflow.jo');
+
+UPDATE internship
+   SET minimum_gpa = 3.00
+ WHERE title = 'Financial Analyst Intern'
+   AND employer_user_id = (SELECT user_id FROM users WHERE email = 'nour@brightbank.jo');
 
 -- =============================================================================
 -- 7. Required skills per internship
@@ -848,6 +883,182 @@ INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_m
 SELECT i.internship_id, s.skill_id, 'intermediate', 1 FROM internship i, skill s
 WHERE i.title = 'Cloud DevOps Intern' AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'sarah@techcorp.jo')
   AND s.normalized_name IN ('aws','docker','githubactions');
+
+-- =============================================================================
+-- 7b. Matching-engine test internships
+--
+-- These postings exist specifically to exercise the new matching engine's
+-- caps and edge cases end-to-end. Each is annotated with the engine behavior
+-- it demonstrates so a manual tester knows what to look for.
+-- =============================================================================
+
+-- (a) Hybrid + different country -> location score 0, alert visible on student
+--     and employer side, final score CAPPED at 50.
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
+SELECT user_id,
+       'Remote-First Backend Intern (UAE)',
+       'Join our distributed engineering team building backend services used across the GCC. You will work on APIs, observability, and reliability tooling alongside senior engineers.',
+       'Dubai', 'UAE', 'hybrid', 6, 700, 1100,
+       DATE_ADD(CURDATE(), INTERVAL 40 DAY), 'active'
+FROM users WHERE email = 'sami@globaltech.ae'
+  AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Remote-First Backend Intern (UAE)' AND employer_user_id = users.user_id);
+
+-- (b) Onsite + different country -> location score 0, alert + cap 50.
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
+SELECT user_id,
+       'Cloud Infrastructure Intern (UAE)',
+       'Help operate our Kubernetes platform and CI/CD pipelines from our Dubai HQ. Daily on-site collaboration with our SRE team.',
+       'Dubai', 'UAE', 'on-site', 4, 800, 1200,
+       DATE_ADD(CURDATE(), INTERVAL 35 DAY), 'active'
+FROM users WHERE email = 'sami@globaltech.ae'
+  AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Cloud Infrastructure Intern (UAE)' AND employer_user_id = users.user_id);
+
+-- (c) Remote + different country -> location score 10, NO alert (remote
+--     ignores location). Useful baseline alongside (a) and (b).
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
+SELECT user_id,
+       'Remote Data Engineering Intern (UAE)',
+       'Build data pipelines for our analytics platform. Fully remote with overlapping hours with the Dubai team.',
+       'Dubai', 'UAE', 'remote', 3, 600, 900,
+       DATE_ADD(CURDATE(), INTERVAL 50 DAY), 'active'
+FROM users WHERE email = 'sami@globaltech.ae'
+  AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Remote Data Engineering Intern (UAE)' AND employer_user_id = users.user_id);
+
+-- (d) N=1 mandatory skill -> if the student lacks that skill, the count-based
+--     mandatory cap fires at 50 (sole_mandatory_skill_missing). If they have
+--     it, the score is capped only by the other components.
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
+SELECT user_id,
+       'React-Only Bootcamp Intern',
+       'Twelve-week deep-dive on building React component libraries. The single mandatory requirement is intermediate React; everything else is taught on the job.',
+       'Amman', 'Jordan', 'hybrid', 3, 350, 550,
+       DATE_ADD(CURDATE(), INTERVAL 30 DAY), 'active'
+FROM users WHERE email = 'sarah@techcorp.jo'
+  AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'React-Only Bootcamp Intern' AND employer_user_id = users.user_id);
+
+-- (e) N=2 mandatory skills -> when the student is missing 1 of 2, the cap is
+--     60 (half_mandatory_skills_missing). When missing both, cap drops to 50.
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
+SELECT user_id,
+       'SQL & MySQL Database Intern',
+       'Help our platform team write efficient SQL and tune MySQL for our reporting workloads. Both SQL and MySQL are mandatory; database tuning experience is a plus.',
+       'Amman', 'Jordan', 'on-site', 4, 400, 650,
+       DATE_ADD(CURDATE(), INTERVAL 45 DAY), 'active'
+FROM users WHERE email = 'sarah@techcorp.jo'
+  AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'SQL & MySQL Database Intern' AND employer_user_id = users.user_id);
+
+-- (f) High minimum_gpa (3.80) -> students below get a proportional GPA score
+--     instead of the full 10. Useful for testing the GPA component
+--     independent of caps.
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
+SELECT user_id,
+       'Brand Strategy Lead Intern',
+       'High-bar marketing internship working directly with senior brand strategists on regional campaigns. Strong communication and analytics required.',
+       'Amman', 'Jordan', 'hybrid', 4, 350, 600,
+       DATE_ADD(CURDATE(), INTERVAL 32 DAY), 'active'
+FROM users WHERE email = 'lana@designhub.jo'
+  AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Brand Strategy Lead Intern' AND employer_user_id = users.user_id);
+
+-- (g) Tiebreak demo: two near-identical internships posted same day with
+--     different deadlines. When their final_scores tie, sort by deadline ASC
+--     should put 'Junior Developer (Sprint A)' first.
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
+SELECT user_id,
+       'Junior Developer (Sprint A)',
+       'Short sprint-style internship building internal tooling. Identical scope to Sprint B; closes sooner so it should rank first when scores tie.',
+       'Amman', 'Jordan', 'hybrid', 3, 350, 550,
+       DATE_ADD(CURDATE(), INTERVAL 14 DAY), 'active'
+FROM users WHERE email = 'sarah@techcorp.jo'
+  AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Junior Developer (Sprint A)' AND employer_user_id = users.user_id);
+
+INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
+SELECT user_id,
+       'Junior Developer (Sprint B)',
+       'Identical scope to Sprint A; later deadline so it should rank below Sprint A on tied scores.',
+       'Amman', 'Jordan', 'hybrid', 3, 350, 550,
+       DATE_ADD(CURDATE(), INTERVAL 60 DAY), 'active'
+FROM users WHERE email = 'sarah@techcorp.jo'
+  AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Junior Developer (Sprint B)' AND employer_user_id = users.user_id);
+
+-- minimum_gpa for the engine-test internships above.
+UPDATE internship
+   SET minimum_gpa = 3.80
+ WHERE title = 'Brand Strategy Lead Intern'
+   AND employer_user_id = (SELECT user_id FROM users WHERE email = 'lana@designhub.jo');
+
+-- Required skills for the engine-test internships.
+
+-- (a) Remote-First Backend Intern (UAE) — N=2 mandatory, several optional.
+INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_mandatory)
+SELECT i.internship_id, s.skill_id, 'intermediate', 1 FROM internship i, skill s
+WHERE i.title = 'Remote-First Backend Intern (UAE)' AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'sami@globaltech.ae')
+  AND s.normalized_name IN ('nodejs','restapi');
+INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_mandatory)
+SELECT i.internship_id, s.skill_id, 'beginner', 0 FROM internship i, skill s
+WHERE i.title = 'Remote-First Backend Intern (UAE)' AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'sami@globaltech.ae')
+  AND s.normalized_name IN ('postgresql','docker','aws');
+
+-- (b) Cloud Infrastructure Intern (UAE) — N=3 mandatory.
+INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_mandatory)
+SELECT i.internship_id, s.skill_id, 'intermediate', 1 FROM internship i, skill s
+WHERE i.title = 'Cloud Infrastructure Intern (UAE)' AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'sami@globaltech.ae')
+  AND s.normalized_name IN ('aws','docker','linux');
+INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_mandatory)
+SELECT i.internship_id, s.skill_id, 'beginner', 0 FROM internship i, skill s
+WHERE i.title = 'Cloud Infrastructure Intern (UAE)' AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'sami@globaltech.ae')
+  AND s.normalized_name IN ('kubernetes','terraform');
+
+-- (c) Remote Data Engineering Intern (UAE) — N=2 mandatory.
+INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_mandatory)
+SELECT i.internship_id, s.skill_id, 'intermediate', 1 FROM internship i, skill s
+WHERE i.title = 'Remote Data Engineering Intern (UAE)' AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'sami@globaltech.ae')
+  AND s.normalized_name IN ('python','sql');
+INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_mandatory)
+SELECT i.internship_id, s.skill_id, 'beginner', 0 FROM internship i, skill s
+WHERE i.title = 'Remote Data Engineering Intern (UAE)' AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'sami@globaltech.ae')
+  AND s.normalized_name IN ('pandas','etl');
+
+-- (d) React-Only Bootcamp Intern — N=1 mandatory (React).
+INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_mandatory)
+SELECT i.internship_id, s.skill_id, 'intermediate', 1 FROM internship i, skill s
+WHERE i.title = 'React-Only Bootcamp Intern' AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'sarah@techcorp.jo')
+  AND s.normalized_name IN ('react');
+INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_mandatory)
+SELECT i.internship_id, s.skill_id, 'beginner', 0 FROM internship i, skill s
+WHERE i.title = 'React-Only Bootcamp Intern' AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'sarah@techcorp.jo')
+  AND s.normalized_name IN ('javascript','typescript');
+
+-- (e) SQL & MySQL Database Intern — N=2 mandatory.
+INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_mandatory)
+SELECT i.internship_id, s.skill_id, 'intermediate', 1 FROM internship i, skill s
+WHERE i.title = 'SQL & MySQL Database Intern' AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'sarah@techcorp.jo')
+  AND s.normalized_name IN ('sql','mysql');
+INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_mandatory)
+SELECT i.internship_id, s.skill_id, 'beginner', 0 FROM internship i, skill s
+WHERE i.title = 'SQL & MySQL Database Intern' AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'sarah@techcorp.jo')
+  AND s.normalized_name IN ('python','dataanalysis');
+
+-- (f) Brand Strategy Lead Intern — N=2 mandatory + minimum_gpa 3.80.
+INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_mandatory)
+SELECT i.internship_id, s.skill_id, 'intermediate', 1 FROM internship i, skill s
+WHERE i.title = 'Brand Strategy Lead Intern' AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'lana@designhub.jo')
+  AND s.normalized_name IN ('communication','digitalmarketing');
+INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_mandatory)
+SELECT i.internship_id, s.skill_id, 'beginner', 0 FROM internship i, skill s
+WHERE i.title = 'Brand Strategy Lead Intern' AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'lana@designhub.jo')
+  AND s.normalized_name IN ('writing','contentstrategy','dataanalysis');
+
+-- (g) Tiebreak demo internships (same skills, same level, different deadlines).
+INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_mandatory)
+SELECT i.internship_id, s.skill_id, 'intermediate', 1 FROM internship i, skill s
+WHERE i.title IN ('Junior Developer (Sprint A)', 'Junior Developer (Sprint B)')
+  AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'sarah@techcorp.jo')
+  AND s.normalized_name IN ('javascript','git');
+INSERT IGNORE INTO requires_skill (internship_id, skill_id, required_level, is_mandatory)
+SELECT i.internship_id, s.skill_id, 'beginner', 0 FROM internship i, skill s
+WHERE i.title IN ('Junior Developer (Sprint A)', 'Junior Developer (Sprint B)')
+  AND i.employer_user_id = (SELECT user_id FROM users WHERE email = 'sarah@techcorp.jo')
+  AND s.normalized_name IN ('react','html');
 
 -- =============================================================================
 -- 8. Applications, bookmarks, invitations, conversations, and analytics

@@ -53,9 +53,12 @@ router.put(
     body('instagramUrl')
       .optional({ values: 'null' })
       .isLength({ max: 255 }),
-    body('location')
+    body('city')
       .optional({ values: 'null' })
-      .isLength({ max: 150 }),
+      .isLength({ max: 100 }),
+    body('country')
+      .optional({ values: 'null' })
+      .isLength({ max: 100 }),
   ],
   handleValidationErrors,
   employerController.updateProfile
@@ -90,11 +93,16 @@ router.post(
       .trim()
       .notEmpty()
       .withMessage('Description is required'),
-    body('location')
+    body('city')
       .trim()
       .notEmpty()
-      .withMessage('Location is required')
-      .isLength({ max: 150 }),
+      .withMessage('City is required')
+      .isLength({ max: 100 }),
+    body('country')
+      .trim()
+      .notEmpty()
+      .withMessage('Country is required')
+      .isLength({ max: 100 }),
     body('workType')
       .isIn(['remote', 'hybrid', 'on-site'])
       .withMessage('Work type must be remote, hybrid, or on-site'),
@@ -109,6 +117,10 @@ router.post(
       .optional({ values: 'null' })
       .isFloat({ min: 0 })
       .withMessage('Maximum salary must be non-negative'),
+    body('minimumGpa')
+      .optional({ values: 'null' })
+      .isFloat({ min: 0, max: 4 })
+      .withMessage('Minimum GPA must be between 0.00 and 4.00'),
     body('skills')
       .isArray({ min: 1 })
       .withMessage('At least one skill is required'),
@@ -139,11 +151,16 @@ router.put(
       .optional()
       .trim()
       .notEmpty(),
-    body('location')
+    body('city')
       .optional()
       .trim()
       .notEmpty()
-      .isLength({ max: 150 }),
+      .isLength({ max: 100 }),
+    body('country')
+      .optional()
+      .trim()
+      .notEmpty()
+      .isLength({ max: 100 }),
     body('workType')
       .optional()
       .isIn(['remote', 'hybrid', 'on-site']),
@@ -156,6 +173,9 @@ router.put(
     body('salaryMax')
       .optional({ values: 'null' })
       .isFloat({ min: 0 }),
+    body('minimumGpa')
+      .optional({ values: 'null' })
+      .isFloat({ min: 0, max: 4 }),
   ],
   handleValidationErrors,
   employerController.updateInternship

@@ -253,7 +253,8 @@ export default function StudentProfile() {
         bio: profile.bio || null,
         gender: profile.gender || null,
         dateOfBirth: profile.dateOfBirth || null,
-        location: profile.location || null,
+        city: profile.city || null,
+        country: profile.country || null,
       });
       updateUser({ fullName: profile.fullName });
       setOriginal(profile);
@@ -479,10 +480,10 @@ export default function StudentProfile() {
                 <GraduationCap size={12} />
                 {profile.gpa ? `GPA ${profile.gpa} • ` : ''}Class of {profile.graduationYear}
               </span>
-              {profile.location && (
+              {(profile.city || profile.country) && (
                 <span className="inline-flex items-center gap-1.5 text-xs font-bold text-primary-200/80">
                   <MapPin size={12} />
-                  {profile.location}
+                  {[profile.city, profile.country].filter(Boolean).join(', ')}
                 </span>
               )}
               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide ${
@@ -535,8 +536,11 @@ export default function StudentProfile() {
                   <FormField label="Phone">
                     <TextInput value={profile.phone || ''} onChange={(e) => setProfile((p) => ({ ...p, phone: e.target.value }))} placeholder="+962 7X XXX XXXX" />
                   </FormField>
-                  <FormField label="Location">
-                    <TextInput value={profile.location || ''} onChange={(e) => setProfile((p) => ({ ...p, location: e.target.value }))} placeholder="Amman, Jordan" />
+                  <FormField label="City">
+                    <TextInput value={profile.city || ''} onChange={(e) => setProfile((p) => ({ ...p, city: e.target.value }))} placeholder="Amman" />
+                  </FormField>
+                  <FormField label="Country">
+                    <TextInput value={profile.country || ''} onChange={(e) => setProfile((p) => ({ ...p, country: e.target.value }))} placeholder="Jordan" />
                   </FormField>
                   <FormField label="LinkedIn">
                     <TextInput value={profile.linkedinUrl || ''} onChange={(e) => setProfile((p) => ({ ...p, linkedinUrl: e.target.value }))} placeholder="linkedin.com/in/username" />
@@ -568,7 +572,7 @@ export default function StudentProfile() {
                 <ReadField label="Gender" value={profile.gender} icon={UserCircle2} />
                 <ReadField label="Date of Birth" value={formatDate(profile.dateOfBirth)} icon={Calendar} />
                 <ReadField label="Phone" value={profile.phone} icon={Phone} />
-                <ReadField label="Location" value={profile.location} icon={MapPin} />
+                <ReadField label="Location" value={[profile.city, profile.country].filter(Boolean).join(', ')} icon={MapPin} />
                 <ReadField label="LinkedIn" value={profile.linkedinUrl} icon={Linkedin} />
                 <ReadField label="GitHub" value={profile.githubUrl} icon={Github} />
                 <ReadField label="Instagram" value={profile.instagramUrl} icon={Instagram} />
