@@ -41,3 +41,4 @@ design-preview.html
 # Tooling caches
 .claude/
 .playwright-mcp/
+CLAUDE.md
