@@ -563,12 +563,27 @@ const getInternship = catchAsync(async (req, res) => {
     applicantCount = countRows[0].count;
   }
 
-  // View logging: only for logged-in students viewing publicly visible internships
+  // View logging: only for logged-in students viewing publicly visible
+  // internships. Dedupe within a 30-minute window so refreshing the page
+  // or returning shortly after doesn't inflate the analytics count.
   if (req.user && req.user.role === 'student' && isPubliclyVisible) {
-    pool.execute(
-      'INSERT INTO internship_view (internship_id, viewer_user_id) VALUES (?, ?)',
-      [String(id), String(req.user.userId)]
-    ).catch(() => {}); // fire-and-forget
+    (async () => {
+      try {
+        const [recent] = await pool.execute(
+          `SELECT view_id FROM internship_view
+            WHERE internship_id = ? AND viewer_user_id = ?
+              AND viewed_at >= (NOW() - INTERVAL 30 MINUTE)
+            LIMIT 1`,
+          [String(id), String(req.user.userId)]
+        );
+        if (recent.length === 0) {
+          await pool.execute(
+            'INSERT INTO internship_view (internship_id, viewer_user_id) VALUES (?, ?)',
+            [String(id), String(req.user.userId)]
+          );
+        }
+      } catch { /* fire-and-forget */ }
+    })();
   }
 
   const data = {

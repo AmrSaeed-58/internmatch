@@ -18,6 +18,7 @@ const FIELDS = {
   MARKETING:   'Marketing',
   DESIGN:      'Design',
   BUSINESS:    'Business',
+  OTHER:       'Other',
 };
 
 const MAJOR_FIELD_MAP = {
@@ -29,6 +30,8 @@ const MAJOR_FIELD_MAP = {
   'Data Science':                { primary: FIELDS.TECHNOLOGY, related: [FIELDS.ENGINEERING, FIELDS.FINANCE] },
   'Artificial Intelligence':     { primary: FIELDS.TECHNOLOGY, related: [FIELDS.ENGINEERING] },
   'Cybersecurity':               { primary: FIELDS.TECHNOLOGY, related: [FIELDS.ENGINEERING] },
+  'Machine Learning':            { primary: FIELDS.TECHNOLOGY, related: [FIELDS.ENGINEERING, FIELDS.FINANCE] },
+  'Game Development':            { primary: FIELDS.TECHNOLOGY, related: [FIELDS.DESIGN] },
   'Computer Engineering':        { primary: FIELDS.ENGINEERING, related: [FIELDS.TECHNOLOGY] },
 
   // ---- Engineering (non-computing) ----
@@ -39,6 +42,22 @@ const MAJOR_FIELD_MAP = {
   'Industrial Engineering':      { primary: FIELDS.ENGINEERING, related: [FIELDS.BUSINESS] },
   'Architecture':                { primary: FIELDS.ENGINEERING, related: [FIELDS.DESIGN] },
   'Biomedical Engineering':      { primary: FIELDS.ENGINEERING, related: [FIELDS.HEALTHCARE] },
+  'Aerospace Engineering':       { primary: FIELDS.ENGINEERING, related: [FIELDS.TECHNOLOGY] },
+  'Environmental Engineering':   { primary: FIELDS.ENGINEERING, related: [FIELDS.HEALTHCARE] },
+  'Materials Engineering':       { primary: FIELDS.ENGINEERING, related: [FIELDS.TECHNOLOGY] },
+  'Petroleum Engineering':       { primary: FIELDS.ENGINEERING, related: [] },
+  'Mechatronics Engineering':    { primary: FIELDS.ENGINEERING, related: [FIELDS.TECHNOLOGY] },
+
+  // ---- Mathematics & Sciences ----
+  'Mathematics':                 { primary: FIELDS.TECHNOLOGY, related: [FIELDS.FINANCE, FIELDS.EDUCATION] },
+  'Statistics':                  { primary: FIELDS.FINANCE, related: [FIELDS.TECHNOLOGY, FIELDS.BUSINESS] },
+  'Physics':                     { primary: FIELDS.ENGINEERING, related: [FIELDS.EDUCATION, FIELDS.TECHNOLOGY] },
+  'Chemistry':                   { primary: FIELDS.HEALTHCARE, related: [FIELDS.ENGINEERING, FIELDS.EDUCATION] },
+  'Biochemistry':                { primary: FIELDS.HEALTHCARE, related: [FIELDS.EDUCATION] },
+  'Biotechnology':               { primary: FIELDS.HEALTHCARE, related: [FIELDS.TECHNOLOGY] },
+  'Environmental Science':       { primary: FIELDS.HEALTHCARE, related: [FIELDS.EDUCATION, FIELDS.ENGINEERING] },
+  'Geology':                     { primary: FIELDS.ENGINEERING, related: [FIELDS.EDUCATION] },
+  'Astronomy':                   { primary: FIELDS.EDUCATION, related: [FIELDS.ENGINEERING] },
 
   // ---- Business / Finance ----
   'Business Administration':     { primary: FIELDS.BUSINESS, related: [FIELDS.MARKETING, FIELDS.FINANCE] },
@@ -47,18 +66,31 @@ const MAJOR_FIELD_MAP = {
   'Finance':                     { primary: FIELDS.FINANCE, related: [FIELDS.BUSINESS] },
   'Economics':                   { primary: FIELDS.FINANCE, related: [FIELDS.BUSINESS] },
   'Banking':                     { primary: FIELDS.FINANCE, related: [FIELDS.BUSINESS] },
+  'Human Resources':             { primary: FIELDS.BUSINESS, related: [FIELDS.EDUCATION] },
+  'Supply Chain Management':     { primary: FIELDS.BUSINESS, related: [FIELDS.ENGINEERING] },
+  'Entrepreneurship':            { primary: FIELDS.BUSINESS, related: [FIELDS.MARKETING, FIELDS.FINANCE] },
+  'International Business':      { primary: FIELDS.BUSINESS, related: [FIELDS.MARKETING, FIELDS.FINANCE] },
+  'Actuarial Science':           { primary: FIELDS.FINANCE, related: [FIELDS.TECHNOLOGY] },
 
   // ---- Marketing ----
   'Marketing':                   { primary: FIELDS.MARKETING, related: [FIELDS.BUSINESS, FIELDS.DESIGN] },
   'Public Relations':            { primary: FIELDS.MARKETING, related: [FIELDS.BUSINESS] },
   'Communications':              { primary: FIELDS.MARKETING, related: [FIELDS.BUSINESS, FIELDS.EDUCATION] },
   'Advertising':                 { primary: FIELDS.MARKETING, related: [FIELDS.DESIGN, FIELDS.BUSINESS] },
+  'Journalism':                  { primary: FIELDS.MARKETING, related: [FIELDS.EDUCATION] },
+  'Media Studies':               { primary: FIELDS.MARKETING, related: [FIELDS.DESIGN] },
+  'Film & Television':           { primary: FIELDS.MARKETING, related: [FIELDS.DESIGN] },
 
   // ---- Design ----
   'Graphic Design':              { primary: FIELDS.DESIGN, related: [FIELDS.MARKETING] },
   'Interior Design':             { primary: FIELDS.DESIGN, related: [FIELDS.ENGINEERING] },
   'Fashion Design':              { primary: FIELDS.DESIGN, related: [] },
   'Industrial Design':           { primary: FIELDS.DESIGN, related: [FIELDS.ENGINEERING] },
+  'Fine Arts':                   { primary: FIELDS.DESIGN, related: [FIELDS.EDUCATION] },
+  'Music':                       { primary: FIELDS.DESIGN, related: [FIELDS.EDUCATION, FIELDS.MARKETING] },
+  'Theater':                     { primary: FIELDS.DESIGN, related: [FIELDS.EDUCATION, FIELDS.MARKETING] },
+  'Photography':                 { primary: FIELDS.DESIGN, related: [FIELDS.MARKETING] },
+  'Animation':                   { primary: FIELDS.DESIGN, related: [FIELDS.TECHNOLOGY, FIELDS.MARKETING] },
 
   // ---- Healthcare ----
   'Medicine':                    { primary: FIELDS.HEALTHCARE, related: [] },
@@ -67,11 +99,36 @@ const MAJOR_FIELD_MAP = {
   'Dentistry':                   { primary: FIELDS.HEALTHCARE, related: [] },
   'Public Health':               { primary: FIELDS.HEALTHCARE, related: [FIELDS.EDUCATION] },
   'Biology':                     { primary: FIELDS.HEALTHCARE, related: [FIELDS.EDUCATION] },
+  'Physical Therapy':            { primary: FIELDS.HEALTHCARE, related: [] },
+  'Veterinary Medicine':         { primary: FIELDS.HEALTHCARE, related: [] },
+  'Nutrition':                   { primary: FIELDS.HEALTHCARE, related: [FIELDS.EDUCATION] },
+  'Medical Laboratory Sciences': { primary: FIELDS.HEALTHCARE, related: [FIELDS.TECHNOLOGY] },
+
+  // ---- Law, Social Sciences & Humanities ----
+  'Law':                         { primary: FIELDS.OTHER, related: [FIELDS.BUSINESS] },
+  'Political Science':           { primary: FIELDS.OTHER, related: [FIELDS.BUSINESS, FIELDS.EDUCATION] },
+  'International Relations':     { primary: FIELDS.BUSINESS, related: [FIELDS.OTHER, FIELDS.MARKETING] },
+  'Sociology':                   { primary: FIELDS.EDUCATION, related: [FIELDS.HEALTHCARE, FIELDS.MARKETING] },
+  'Psychology':                  { primary: FIELDS.HEALTHCARE, related: [FIELDS.EDUCATION, FIELDS.BUSINESS] },
+  'Anthropology':                { primary: FIELDS.EDUCATION, related: [FIELDS.MARKETING] },
+  'History':                     { primary: FIELDS.EDUCATION, related: [FIELDS.MARKETING] },
+  'Philosophy':                  { primary: FIELDS.EDUCATION, related: [FIELDS.BUSINESS] },
+  'Linguistics':                 { primary: FIELDS.EDUCATION, related: [FIELDS.MARKETING, FIELDS.TECHNOLOGY] },
+  'English Literature':          { primary: FIELDS.EDUCATION, related: [FIELDS.MARKETING] },
+  'Social Work':                 { primary: FIELDS.HEALTHCARE, related: [FIELDS.EDUCATION, FIELDS.OTHER] },
 
   // ---- Education ----
   'Education':                   { primary: FIELDS.EDUCATION, related: [] },
   'Teaching':                    { primary: FIELDS.EDUCATION, related: [] },
   'Early Childhood Education':   { primary: FIELDS.EDUCATION, related: [] },
+
+  // ---- Other professional ----
+  'Hospitality Management':      { primary: FIELDS.BUSINESS, related: [FIELDS.MARKETING] },
+  'Tourism':                     { primary: FIELDS.BUSINESS, related: [FIELDS.MARKETING] },
+  'Culinary Arts':               { primary: FIELDS.BUSINESS, related: [FIELDS.OTHER] },
+  'Agriculture':                 { primary: FIELDS.OTHER, related: [FIELDS.HEALTHCARE, FIELDS.ENGINEERING] },
+  'Urban Planning':              { primary: FIELDS.ENGINEERING, related: [FIELDS.DESIGN, FIELDS.BUSINESS] },
+  'Other':                       { primary: FIELDS.OTHER, related: [] },
 };
 
 const UNKNOWN_MAJOR_DEFAULT = { primary: null, related: [] };

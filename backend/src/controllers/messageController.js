@@ -302,6 +302,19 @@ const markAsRead = catchAsync(async (req, res) => {
     [String(id), String(userId)]
   );
 
+  // Also clear any bell notifications about new messages in this conversation.
+  // Without this, the conversation list shows 0 unread but the bell stays red.
+  await pool.execute(
+    `UPDATE notification
+        SET is_read = 1
+      WHERE user_id = ?
+        AND type = 'new_message'
+        AND reference_type = 'conversation'
+        AND reference_id = ?
+        AND is_read = 0`,
+    [String(userId), String(id)]
+  );
+
   // Emit read receipt via Socket.IO
   const otherUserId = conv[0].student_user_id === userId ? conv[0].employer_user_id : conv[0].student_user_id;
   const io = req.app.get('io');

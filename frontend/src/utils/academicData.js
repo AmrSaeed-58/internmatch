@@ -116,6 +116,8 @@ export const INDUSTRIES = [
   'Education',
   'Marketing',
   'Engineering',
+  'Business',
+  'Design',
   'Other',
 ];
 

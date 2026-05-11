@@ -40,6 +40,8 @@ export const getApplicantProfile = (studentId) =>
   API.get(`/employer/applicants/${studentId}/profile`);
 export const updateApplicationStatus = (applicationId, data) =>
   API.put(`/employer/applications/${applicationId}/status`, data);
+export const getApplicationHistory = (applicationId) =>
+  API.get(`/employer/applications/${applicationId}/history`);
 export const downloadResume = (applicationId) =>
   API.get(`/employer/applications/${applicationId}/resume`, { responseType: 'blob' });
 

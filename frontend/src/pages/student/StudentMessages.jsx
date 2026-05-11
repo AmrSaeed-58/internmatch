@@ -242,7 +242,15 @@ export default function StudentMessages() {
       try {
         const res = await messagesAPI.getMessages(activeConvId, { limit: 50 });
         if (!cancelled) setMessages(res.data.data);
-        messagesAPI.markAsRead(activeConvId).catch(() => {});
+        messagesAPI.markAsRead(activeConvId).then(() => {
+          window.dispatchEvent(new Event('internmatch:messages-changed'));
+          window.dispatchEvent(new Event('internmatch:notifications-changed'));
+        }).catch(() => {});
+        // Clear local unread count for the active conversation immediately so
+        // the conversation-list badge updates without waiting for a refetch.
+        setConversations((prev) =>
+          prev.map((c) => (c.conversationId === activeConvId ? { ...c, unreadCount: 0 } : c))
+        );
         if (socket) socket.emit('message:read', { conversationId: activeConvId });
       } catch {
         if (!cancelled) setMessages([]);
@@ -264,7 +272,10 @@ export default function StudentMessages() {
 
       if (msg.conversationId === activeConvId) {
         setMessages((prev) => prev.some((m) => m.messageId === msg.messageId) ? prev : [...prev, msg]);
-        messagesAPI.markAsRead(msg.conversationId).catch(() => {});
+        messagesAPI.markAsRead(msg.conversationId).then(() => {
+          window.dispatchEvent(new Event('internmatch:messages-changed'));
+          window.dispatchEvent(new Event('internmatch:notifications-changed'));
+        }).catch(() => {});
         socket.emit('message:read', { conversationId: msg.conversationId });
       }
       setConversations((prev) =>

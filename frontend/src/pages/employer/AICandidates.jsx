@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import {
   Sparkles,
   ChevronDown,
@@ -8,6 +9,7 @@ import {
   SlidersHorizontal,
   CheckCircle2,
   Send,
+  User,
   Loader2,
   AlertTriangle,
 } from 'lucide-react';
@@ -291,7 +293,15 @@ export default function AICandidates() {
                           )}
                         </div>
 
-                        <div className="mt-4 pt-3 border-t border-surface-100 dark:border-surface-700 shrink-0">
+                        <div className="mt-4 pt-3 border-t border-surface-100 dark:border-surface-700 shrink-0 space-y-2">
+                          <Link
+                            to={`/employer/student/${candidate.studentUserId}`}
+                            state={{ internshipId: Number(selectedInternship) }}
+                            className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-200 text-xs font-semibold border border-surface-200 dark:border-surface-700 hover:border-primary-400 dark:hover:border-primary-500 hover:text-primary-700 dark:hover:text-primary-300 transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30"
+                          >
+                            <User size={12} />
+                            View Profile
+                          </Link>
                           {isInvited ? (
                             <div className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl bg-accent-50 dark:bg-accent-900/20 text-accent-700 dark:text-accent-400 text-xs font-semibold border border-accent-200 dark:border-accent-800/30">
                               <CheckCircle2 size={13} />

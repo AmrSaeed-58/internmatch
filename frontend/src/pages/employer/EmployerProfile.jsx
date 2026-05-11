@@ -24,7 +24,7 @@ import * as employerAPI from '../../api/employer';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 const INDUSTRIES = [
-  'Technology', 'Finance', 'Healthcare', 'Education', 'Engineering', 'Marketing', 'Other',
+  'Technology', 'Finance', 'Healthcare', 'Education', 'Engineering', 'Marketing', 'Business', 'Design', 'Other',
 ];
 
 const COMPANY_SIZES = ['1-50', '51-200', '201-500', '500+'];

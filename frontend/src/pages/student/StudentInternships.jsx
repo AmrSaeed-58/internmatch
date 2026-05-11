@@ -39,6 +39,8 @@ const INDUSTRY_OPTIONS = [
   'Education',
   'Marketing',
   'Engineering',
+  'Business',
+  'Design',
   'Other',
 ];
 

@@ -58,6 +58,26 @@ router.put(
     body('phone')
       .optional({ values: 'null' })
       .isLength({ max: 20 }),
+    body('gender')
+      .optional({ values: 'null' })
+      .isLength({ max: 20 })
+      .withMessage('Gender must be at most 20 characters'),
+    body('dateOfBirth')
+      .optional({ values: 'null' })
+      .matches(/^\d{4}-\d{2}-\d{2}(T.*)?$/)
+      .withMessage('Date of birth must be in YYYY-MM-DD format'),
+    body('universityStartDate')
+      .optional({ values: 'null' })
+      .matches(/^\d{4}-\d{2}-\d{2}(T.*)?$/)
+      .withMessage('University start date must be in YYYY-MM-DD format'),
+    body('city')
+      .optional({ values: 'null' })
+      .isLength({ max: 100 })
+      .withMessage('City must be at most 100 characters'),
+    body('country')
+      .optional({ values: 'null' })
+      .isLength({ max: 100 })
+      .withMessage('Country must be at most 100 characters'),
   ],
   handleValidationErrors,
   studentController.updateProfile
@@ -71,7 +91,49 @@ router.post(
   '/resume/confirm',
   [
     body('staging').notEmpty().withMessage('Staging data is required'),
-    body('staging.filePath').notEmpty().withMessage('File path is required'),
+    body('staging.filePath')
+      .matches(/^\/uploads\/resumes\/\d+_[0-9a-f-]{36}\.(pdf|docx)$/i)
+      .withMessage('Invalid staged file path'),
+    body('staging.fileType')
+      .optional({ values: 'null' })
+      .isIn(['pdf', 'docx'])
+      .withMessage('File type must be pdf or docx'),
+    body('staging.originalFilename')
+      .optional({ values: 'null' })
+      .isLength({ max: 255 })
+      .withMessage('Original filename must be at most 255 characters'),
+    body('skills')
+      .optional({ values: 'null' })
+      .isArray()
+      .withMessage('Skills must be an array'),
+    body('skills.*')
+      .custom((value) => {
+        if (!value || typeof value !== 'object') {
+          throw new Error('Each skill must be an object');
+        }
+        const hasId = value.skillId !== undefined && value.skillId !== null && value.skillId !== '';
+        const hasName = typeof value.skillName === 'string' && value.skillName.trim().length > 0;
+        if (!hasId && !hasName) {
+          throw new Error('Each skill must include skillId or skillName');
+        }
+        return true;
+      }),
+    body('skills.*.skillId')
+      .optional({ values: 'null' })
+      .isInt({ min: 1 })
+      .withMessage('skillId must be a positive integer'),
+    body('skills.*.skillName')
+      .optional({ values: 'null' })
+      .isLength({ min: 1, max: 100 })
+      .withMessage('skillName must be 1–100 characters'),
+    body('skills.*.category')
+      .optional({ values: 'null' })
+      .isIn(['programming', 'web', 'data', 'ai_ml', 'devops', 'mobile', 'design', 'soft_skill', 'other'])
+      .withMessage('Invalid skill category'),
+    body('skills.*.proficiencyLevel')
+      .optional({ values: 'null' })
+      .isIn(['beginner', 'intermediate', 'advanced'])
+      .withMessage('Proficiency must be beginner, intermediate, or advanced'),
   ],
   handleValidationErrors,
   studentController.confirmResume
@@ -152,6 +214,20 @@ router.put(
 );
 
 router.get('/recommendations', studentController.getRecommendations);
+
+router.get('/invitations', studentController.getInvitations);
+router.put(
+  '/invitations/:id/viewed',
+  [param('id').isInt().withMessage('Invalid invitation ID')],
+  handleValidationErrors,
+  studentController.markInvitationViewed
+);
+router.put(
+  '/invitations/:id/dismiss',
+  [param('id').isInt().withMessage('Invalid invitation ID')],
+  handleValidationErrors,
+  studentController.dismissInvitation
+);
 
 router.get('/bookmarks', studentController.getBookmarks);
 

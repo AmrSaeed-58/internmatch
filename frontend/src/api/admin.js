@@ -15,6 +15,8 @@ export const getInternships = (params) => API.get('/admin/internships', { params
 export const approveInternship = (id) => API.put(`/admin/internships/${id}/approve`);
 export const rejectInternship = (id, note) => API.put(`/admin/internships/${id}/reject`, { note });
 export const deleteInternship = (id) => API.delete(`/admin/internships/${id}`);
+export const getInternshipApplicants = (id, params) =>
+  API.get(`/admin/internships/${id}/applicants`, { params });
 
 // Logs
 export const getLogs = (params) => API.get('/admin/logs', { params });

@@ -88,7 +88,15 @@ export default function EmployerMessages() {
       try {
         const res = await messagesAPI.getMessages(activeId, { limit: 50 });
         if (!cancelled) setMessages(res.data.data);
-        messagesAPI.markAsRead(activeId).catch(() => {});
+        messagesAPI.markAsRead(activeId).then(() => {
+          window.dispatchEvent(new Event('internmatch:messages-changed'));
+          window.dispatchEvent(new Event('internmatch:notifications-changed'));
+        }).catch(() => {});
+        // Clear local unread count for the active conversation immediately so
+        // the conversation-list badge updates without waiting for a refetch.
+        setConversations((prev) =>
+          prev.map((c) => (c.conversationId === activeId ? { ...c, unreadCount: 0 } : c))
+        );
         if (socket) socket.emit('message:read', { conversationId: activeId });
       } catch {
         if (!cancelled) setMessages([]);
@@ -115,7 +123,10 @@ export default function EmployerMessages() {
           if (prev.some((m) => m.messageId === msg.messageId)) return prev;
           return [...prev, msg];
         });
-        messagesAPI.markAsRead(msg.conversationId).catch(() => {});
+        messagesAPI.markAsRead(msg.conversationId).then(() => {
+          window.dispatchEvent(new Event('internmatch:messages-changed'));
+          window.dispatchEvent(new Event('internmatch:notifications-changed'));
+        }).catch(() => {});
         socket.emit('message:read', { conversationId: msg.conversationId });
       }
 

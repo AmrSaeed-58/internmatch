@@ -5,7 +5,9 @@ const pool = require('../config/db');
 const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 const { findOrCreateSkill } = require('../utils/skillResolver');
+const { normalizeSkillName } = require('../utils/normalizeSkill');
 const matchScoreCache = require('../services/matchScoreCache');
+const { createNotification } = require('../utils/notificationService');
 const { formatLocation } = require('./internshipController');
 const { resolveMajorFields } = require('../config/majorFieldMap');
 
@@ -15,17 +17,33 @@ const uploadDir = process.env.UPLOAD_DIR || './uploads';
 function normalizeDateInput(value, fieldLabel) {
   if (value === null || value === '') return null;
 
+  let datePart = null;
   if (typeof value === 'string') {
-    const datePart = value.split('T')[0];
-    if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return datePart;
+    const candidate = value.split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(candidate)) datePart = candidate;
   }
 
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
+  if (!datePart) {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new AppError(`${fieldLabel} must be a valid date`, 400);
+    }
+    datePart = parsed.toISOString().slice(0, 10);
+  }
+
+  // Reject impossible calendar dates like 2026-02-31. Date() round-trips a
+  // valid Y-M-D to itself; an invalid one shifts.
+  const [y, m, d] = datePart.split('-').map(Number);
+  const roundTrip = new Date(Date.UTC(y, m - 1, d));
+  if (
+    roundTrip.getUTCFullYear() !== y ||
+    roundTrip.getUTCMonth() !== m - 1 ||
+    roundTrip.getUTCDate() !== d
+  ) {
     throw new AppError(`${fieldLabel} must be a valid date`, 400);
   }
 
-  return parsed.toISOString().slice(0, 10);
+  return datePart;
 }
 
 const getProfile = catchAsync(async (req, res) => {
@@ -103,12 +121,15 @@ const getProfile = catchAsync(async (req, res) => {
   });
 });
 
+// Profile fields that affect match scoring. Updates outside this set don't
+// need to invalidate the score cache.
+const MATCH_RELEVANT_PROFILE_FIELDS = new Set([
+  'major', 'gpa', 'city', 'country',
+]);
+
 const updateProfile = catchAsync(async (req, res) => {
   const { userId } = req.user;
-  const {
-    fullName, major, university, universityStartDate, graduationYear,
-    gpa, bio, linkedinUrl, githubUrl, instagramUrl, phone,
-  } = req.body;
+  const { fullName } = req.body;
 
   const connection = await pool.getConnection();
   try {
@@ -141,6 +162,7 @@ const updateProfile = catchAsync(async (req, res) => {
       phone: 'phone',
     };
 
+    let matchAffected = false;
     for (const [jsKey, dbCol] of Object.entries(fieldMap)) {
       const value = req.body[jsKey];
       if (value !== undefined) {
@@ -149,6 +171,7 @@ const updateProfile = catchAsync(async (req, res) => {
           : value === '' ? null : value;
         studentFields.push(`${dbCol} = ?`);
         studentValues.push(normalizedValue);
+        if (MATCH_RELEVANT_PROFILE_FIELDS.has(dbCol)) matchAffected = true;
       }
     }
 
@@ -162,8 +185,9 @@ const updateProfile = catchAsync(async (req, res) => {
 
     await connection.commit();
 
-    // Profile change invalidates this student's cached match scores.
-    await matchScoreCache.invalidateForStudent(userId);
+    if (matchAffected) {
+      await matchScoreCache.invalidateForStudent(userId);
+    }
 
     res.json({ success: true, message: 'Profile updated successfully' });
   } catch (err) {
@@ -287,6 +311,13 @@ const uploadResume = catchAsync(async (req, res) => {
   });
 });
 
+// Whitelisted shape for staging.filePath. Must be
+//   /uploads/resumes/<userId>_<uuid>.<ext>
+// The userId prefix binds the staged file to the uploader.
+const STAGING_PATH_RE = /^\/uploads\/resumes\/(\d+)_[0-9a-f-]{36}\.(pdf|docx)$/i;
+// 1h grace window between upload and confirm.
+const STAGING_MAX_AGE_MS = 60 * 60 * 1000;
+
 const confirmResume = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { staging, skills } = req.body;
@@ -294,6 +325,46 @@ const confirmResume = catchAsync(async (req, res) => {
   if (!staging || !staging.filePath) {
     throw new AppError('No staged resume to confirm', 400);
   }
+
+  // Verify the staging filePath points to a real, recently uploaded file
+  // under /uploads/resumes, that the upload was made by this student, and
+  // that we never escape the allowed root.
+  if (typeof staging.filePath !== 'string') {
+    throw new AppError('Invalid staged file path', 400);
+  }
+  const match = staging.filePath.match(STAGING_PATH_RE);
+  if (!match) {
+    throw new AppError('Invalid staged file path', 400);
+  }
+  if (Number(match[1]) !== Number(userId)) {
+    // The path doesn't belong to this student — refuse even if the file exists.
+    throw new AppError('Staged resume does not belong to this user', 403);
+  }
+  const basename = path.basename(staging.filePath);
+  const resolved = path.resolve(uploadDir, 'resumes', basename);
+  const allowedRoot = path.resolve(uploadDir, 'resumes');
+  if (!resolved.startsWith(allowedRoot + path.sep)) {
+    throw new AppError('Invalid staged file path', 400);
+  }
+  let stat;
+  try {
+    stat = fs.statSync(resolved);
+  } catch (e) {
+    throw new AppError('Staged resume file not found', 400);
+  }
+  if (!stat.isFile()) {
+    throw new AppError('Staged resume file not found', 400);
+  }
+  if (Date.now() - stat.mtimeMs > STAGING_MAX_AGE_MS) {
+    throw new AppError('Staged resume has expired, please upload again', 400);
+  }
+
+  const stagingFileType = staging.fileType === 'pdf' || staging.fileType === 'docx'
+    ? staging.fileType
+    : (path.extname(basename).slice(1).toLowerCase() === 'pdf' ? 'pdf' : 'docx');
+  const stagingOriginalFilename = typeof staging.originalFilename === 'string'
+    ? staging.originalFilename.slice(0, 255)
+    : basename;
 
   const connection = await pool.getConnection();
   try {
@@ -324,7 +395,7 @@ const confirmResume = catchAsync(async (req, res) => {
 
     const [insertResult] = await connection.execute(
       'INSERT INTO resume (student_user_id, file_path, original_filename, file_type, extracted_text) VALUES (?, ?, ?, ?, ?)',
-      [userId, staging.filePath, staging.originalFilename, staging.fileType, staging.extractedText || null]
+      [userId, staging.filePath, stagingOriginalFilename, stagingFileType, staging.extractedText || null]
     );
     const newResumeId = insertResult.insertId;
 
@@ -337,19 +408,26 @@ const confirmResume = catchAsync(async (req, res) => {
     // Save confirmed skills.
     //
     // Two rules to prevent silent data loss:
-    //   1. Clear ONLY the previous extracted-source rows. Manual rows are kept.
+    //   1. Always clear the previous extracted-source rows so stale extracted
+    //      skills don't survive when the new resume yields zero confirmations.
+    //      Manual rows are kept.
     //   2. When inserting an extracted skill, never overwrite a manual row
     //      that already exists for the same skill_id (the student curated it).
-    if (skills && skills.length > 0) {
-      await connection.execute(
-        "DELETE FROM has_skill WHERE student_user_id = ? AND source = 'extracted'",
-        [userId]
-      );
+    await connection.execute(
+      "DELETE FROM has_skill WHERE student_user_id = ? AND source = 'extracted'",
+      [userId]
+    );
 
+    if (skills && skills.length > 0) {
       for (const skill of skills) {
         let skillId = skill.skillId;
 
         if (!skillId) {
+          // Skip entries with neither a usable id nor a usable name so the
+          // skill resolver isn't called with undefined.
+          if (typeof skill.skillName !== 'string' || skill.skillName.trim().length === 0) {
+            continue;
+          }
           const resolved = await findOrCreateSkill(connection, skill.skillName, skill.category || 'other');
           skillId = resolved.skillId;
         }
@@ -715,8 +793,8 @@ const updateNotificationPreferences = catchAsync(async (req, res) => {
 const getNotifications = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { page = 1, limit = 20, unread } = req.query;
-  const pageNum = Math.max(1, parseInt(page));
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
   const offset = (pageNum - 1) * limitNum;
 
   let whereClause = 'WHERE user_id = ?';
@@ -845,24 +923,6 @@ const deleteAccount = catchAsync(async (req, res) => {
 
   res.json({ success: true, message: 'Account deleted permanently' });
 });
-
-// Canonical skill name aliases
-const SKILL_ALIASES = {
-  'c++': 'cpp',
-  'c#': 'csharp',
-  'node.js': 'nodejs',
-  '.net': 'dotnet',
-  'react native': 'reactnative',
-  'ci/cd': 'cicd',
-};
-
-function normalizeSkillName(name) {
-  let normalized = name.toLowerCase().trim();
-  if (SKILL_ALIASES[normalized]) return SKILL_ALIASES[normalized];
-  // Generic: lowercase, strip spaces/dots/hyphens/underscores/slashes (but not all special chars)
-  normalized = normalized.replace(/[\s.\-_/]/g, '');
-  return normalized;
-}
 
 async function extractSkillsFromText(text) {
   if (!text || text.trim().length < 20) return [];
@@ -1007,7 +1067,7 @@ const getApplications = catchAsync(async (req, res) => {
     `SELECT
       a.application_id, a.internship_id, a.status, a.match_score,
       a.cover_letter, a.applied_date, a.status_updated_at,
-      a.submitted_resume_filename, a.employer_note,
+      a.submitted_resume_filename, a.employer_note, a.interview_date,
       i.title AS internship_title, i.city, i.country, i.work_type, i.deadline,
       i.status AS internship_status,
       e.company_name, e.company_logo, e.industry
@@ -1024,12 +1084,13 @@ const getApplications = catchAsync(async (req, res) => {
     applicationId: r.application_id,
     internshipId: r.internship_id,
     status: r.status,
-    matchScore: r.match_score ? Number(r.match_score) : null,
+    matchScore: r.match_score == null ? null : Number(r.match_score),
     coverLetter: r.cover_letter,
     appliedDate: r.applied_date,
     statusUpdatedAt: r.status_updated_at,
     resumeFilename: r.submitted_resume_filename,
     employerNote: r.employer_note,
+    interviewDate: r.interview_date,
     internship: {
       title: r.internship_title,
       city: r.city,
@@ -1062,6 +1123,7 @@ const getApplication = catchAsync(async (req, res) => {
       a.application_id, a.internship_id, a.status, a.match_score,
       a.cover_letter, a.applied_date, a.status_updated_at,
       a.submitted_resume_filename, a.submitted_resume_path, a.employer_note,
+      a.interview_date,
       i.title AS internship_title, i.description AS internship_description,
       i.city, i.country, i.work_type, i.duration_months, i.salary_min, i.salary_max,
       i.deadline, i.status AS internship_status, i.created_at AS internship_created_at,
@@ -1085,12 +1147,13 @@ const getApplication = catchAsync(async (req, res) => {
       applicationId: r.application_id,
       internshipId: r.internship_id,
       status: r.status,
-      matchScore: r.match_score ? Number(r.match_score) : null,
+      matchScore: r.match_score == null ? null : Number(r.match_score),
       coverLetter: r.cover_letter,
       appliedDate: r.applied_date,
       statusUpdatedAt: r.status_updated_at,
       resumeFilename: r.submitted_resume_filename,
       employerNote: r.employer_note,
+      interviewDate: r.interview_date,
       internship: {
         title: r.internship_title,
         description: r.internship_description,
@@ -1139,6 +1202,9 @@ const getApplicationHistory = catchAsync(async (req, res) => {
     [String(id)]
   );
 
+  // NOTE: `application_status_history.note` is intentionally omitted —
+  // the StatusChangeModal labels it "Internal note (not shown to candidate)".
+  // It is exposed only on the employer-side history endpoint.
   res.json({
     success: true,
     data: rows.map((r) => ({
@@ -1273,35 +1339,40 @@ const applyToInternship = catchAsync(async (req, res) => {
       [String(applicationId), oldStatus, String(studentId)]
     );
 
+    // If the student was invited to this internship, flip the invitation
+    // to 'applied' so the employer's invitation list reflects reality.
+    // A previously dismissed invitation should also flip, because the
+    // student is now choosing to apply after all.
     await connection.execute(
-      `INSERT INTO notification
-        (user_id, type, title, message, reference_id, reference_type)
-       VALUES (?, 'new_application', ?, ?, ?, 'application')`,
-      [
-        String(internship.employer_user_id),
-        `New application for "${internship.title}"`,
-        `A student has applied to your internship "${internship.title}".`,
-        String(internshipId),
-      ]
+      `UPDATE internship_invitation
+          SET status = 'applied'
+        WHERE internship_id = ? AND student_user_id = ?
+          AND status IN ('pending','viewed','dismissed')`,
+      [String(internshipId), String(studentId)]
     );
 
     await connection.commit();
   } catch (err) {
     await connection.rollback();
+    if (err.code === 'ER_DUP_ENTRY') {
+      throw new AppError('You have already applied to this internship', 409);
+    }
     throw err;
   } finally {
     connection.release();
   }
 
-  const io = req.app.get('io');
-  if (io) {
-    io.to(`user:${internship.employer_user_id}`).emit('notification:new', {
-      type: 'new_application',
-      title: `New application for "${internship.title}"`,
-      referenceId: internshipId,
-      referenceType: 'application',
-    });
-  }
+  // Notify employer via the shared service so email preferences,
+  // email_sent tracking, and Socket.IO payload enrichment are honored.
+  await createNotification({
+    userId: internship.employer_user_id,
+    type: 'new_application',
+    title: `New application for "${internship.title}"`,
+    message: `A student has applied to your internship "${internship.title}".`,
+    referenceId: applicationId,
+    referenceType: 'application',
+    io: req.app.get('io'),
+  });
 
   res.status(201).json({
     success: true,
@@ -1317,29 +1388,45 @@ const withdrawApplication = catchAsync(async (req, res) => {
   const studentId = req.user.userId;
   const { id } = req.params;
 
-  const [rows] = await pool.execute(
-    'SELECT application_id, status, internship_id FROM application WHERE application_id = ? AND student_user_id = ?',
-    [String(id), String(studentId)]
-  );
-
-  if (rows.length === 0) {
-    throw new AppError('Application not found', 404);
-  }
-
-  const app = rows[0];
-
-  if (!WITHDRAWABLE_STATUSES.includes(app.status)) {
-    throw new AppError(`Cannot withdraw an application that is already ${app.status}`, 400);
-  }
-
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
-    await connection.execute(
-      "UPDATE application SET status = 'withdrawn', status_updated_at = NOW() WHERE application_id = ?",
-      [String(id)]
+    // Lock the row inside the txn so concurrent status changes from the
+    // employer (e.g., accept) can't slip through while we read.
+    const [rows] = await connection.execute(
+      `SELECT application_id, status
+         FROM application
+        WHERE application_id = ? AND student_user_id = ?
+        FOR UPDATE`,
+      [String(id), String(studentId)]
     );
+
+    if (rows.length === 0) {
+      await connection.rollback();
+      throw new AppError('Application not found', 404);
+    }
+
+    const app = rows[0];
+    if (!WITHDRAWABLE_STATUSES.includes(app.status)) {
+      await connection.rollback();
+      throw new AppError(`Cannot withdraw an application that is already ${app.status}`, 400);
+    }
+
+    const placeholders = WITHDRAWABLE_STATUSES.map(() => '?').join(',');
+    const [updateResult] = await connection.execute(
+      `UPDATE application
+          SET status = 'withdrawn', status_updated_at = NOW()
+        WHERE application_id = ?
+          AND student_user_id = ?
+          AND status IN (${placeholders})`,
+      [String(id), String(studentId), ...WITHDRAWABLE_STATUSES]
+    );
+
+    if (updateResult.affectedRows === 0) {
+      await connection.rollback();
+      throw new AppError('Application status changed, please refresh', 409);
+    }
 
     await connection.execute(
       `INSERT INTO application_status_history
@@ -1350,7 +1437,7 @@ const withdrawApplication = catchAsync(async (req, res) => {
 
     await connection.commit();
   } catch (err) {
-    await connection.rollback();
+    try { await connection.rollback(); } catch (e) { /* already rolled back */ }
     throw err;
   } finally {
     connection.release();
@@ -1412,6 +1499,26 @@ const getBookmarks = catchAsync(async (req, res) => {
 const addBookmark = catchAsync(async (req, res) => {
   const studentId = req.user.userId;
   const { internshipId } = req.params;
+
+  // Don't allow bookmarking internships that aren't visible (closed, pending,
+  // rejected, expired) or whose employer is deactivated.
+  const [internRows] = await pool.execute(
+    `SELECT i.internship_id, i.status, i.deadline, u.is_active AS employer_active
+       FROM internship i
+       JOIN users u ON u.user_id = i.employer_user_id
+      WHERE i.internship_id = ?`,
+    [String(internshipId)]
+  );
+  if (internRows.length === 0) {
+    throw new AppError('Internship not found', 404);
+  }
+  const intern = internRows[0];
+  if (intern.status !== 'active' || !intern.employer_active) {
+    throw new AppError('This internship is not available', 400);
+  }
+  if (intern.deadline && new Date(intern.deadline) < new Date(new Date().toISOString().split('T')[0])) {
+    throw new AppError('This internship is past its deadline', 400);
+  }
 
   try {
     await pool.execute(
@@ -1506,7 +1613,9 @@ const getRecommendations = catchAsync(async (req, res) => {
      FROM internship i
      JOIN employer e ON i.employer_user_id = e.user_id
      JOIN users u_emp ON e.user_id = u_emp.user_id AND u_emp.is_active = TRUE
-     WHERE i.internship_id IN (${placeholders})`,
+     WHERE i.internship_id IN (${placeholders})
+       AND i.status = 'active'
+       AND (i.deadline IS NULL OR i.deadline >= CURRENT_DATE)`,
     filteredIds.map(String)
   );
 
@@ -1568,6 +1677,127 @@ const getRecommendations = catchAsync(async (req, res) => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Internship invitations (student side)
+// ---------------------------------------------------------------------------
+const getInvitations = catchAsync(async (req, res) => {
+  const studentId = req.user.userId;
+  const { page = 1, limit = 20, status } = req.query;
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+  const offset = (pageNum - 1) * limitNum;
+
+  const whereClauses = ['inv.student_user_id = ?'];
+  const params = [String(studentId)];
+  if (status && ['pending', 'viewed', 'applied', 'dismissed'].includes(status)) {
+    whereClauses.push('inv.status = ?');
+    params.push(status);
+  }
+  const whereSQL = whereClauses.join(' AND ');
+
+  const [countRows] = await pool.execute(
+    `SELECT COUNT(*) AS total FROM internship_invitation inv WHERE ${whereSQL}`,
+    params
+  );
+  const total = countRows[0].total;
+
+  const [rows] = await pool.execute(
+    `SELECT inv.invitation_id, inv.internship_id, inv.status, inv.message, inv.created_at,
+            i.title, i.city, i.country, i.work_type, i.deadline, i.status AS internship_status,
+            e.company_name, e.company_logo, e.industry
+       FROM internship_invitation inv
+       JOIN internship i ON i.internship_id = inv.internship_id
+       JOIN employer e ON e.user_id = i.employer_user_id
+      WHERE ${whereSQL}
+      ORDER BY inv.created_at DESC
+      LIMIT ? OFFSET ?`,
+    [...params, String(limitNum), String(offset)]
+  );
+
+  res.json({
+    success: true,
+    data: rows.map((r) => ({
+      invitationId: r.invitation_id,
+      internshipId: r.internship_id,
+      status: r.status,
+      message: r.message,
+      createdAt: r.created_at,
+      internship: {
+        title: r.title,
+        city: r.city,
+        country: r.country,
+        location: formatLocation(r.city, r.country),
+        workType: r.work_type,
+        deadline: r.deadline,
+        status: r.internship_status,
+      },
+      employer: {
+        companyName: r.company_name,
+        companyLogo: r.company_logo,
+        industry: r.industry,
+      },
+    })),
+    pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) },
+  });
+});
+
+const markInvitationViewed = catchAsync(async (req, res) => {
+  const studentId = req.user.userId;
+  const { id } = req.params;
+
+  const [existing] = await pool.execute(
+    'SELECT status FROM internship_invitation WHERE invitation_id = ? AND student_user_id = ?',
+    [String(id), String(studentId)]
+  );
+  if (existing.length === 0) {
+    throw new AppError('Invitation not found', 404);
+  }
+
+  const currentStatus = existing[0].status;
+
+  if (currentStatus === 'viewed') {
+    // Idempotent — already in the target state.
+    return res.json({ success: true, message: 'Invitation already marked as viewed' });
+  }
+
+  if (currentStatus !== 'pending') {
+    throw new AppError(`Cannot mark an invitation as viewed when it is already ${currentStatus}`, 400);
+  }
+
+  await pool.execute(
+    `UPDATE internship_invitation
+        SET status = 'viewed'
+      WHERE invitation_id = ? AND student_user_id = ? AND status = 'pending'`,
+    [String(id), String(studentId)]
+  );
+
+  res.json({ success: true, message: 'Invitation marked as viewed' });
+});
+
+const dismissInvitation = catchAsync(async (req, res) => {
+  const studentId = req.user.userId;
+  const { id } = req.params;
+
+  const [result] = await pool.execute(
+    `UPDATE internship_invitation
+        SET status = 'dismissed'
+      WHERE invitation_id = ? AND student_user_id = ?
+        AND status IN ('pending','viewed')`,
+    [String(id), String(studentId)]
+  );
+
+  if (result.affectedRows === 0) {
+    const [exists] = await pool.execute(
+      'SELECT status FROM internship_invitation WHERE invitation_id = ? AND student_user_id = ?',
+      [String(id), String(studentId)]
+    );
+    if (exists.length === 0) throw new AppError('Invitation not found', 404);
+    throw new AppError(`Cannot dismiss an invitation that is already ${exists[0].status}`, 400);
+  }
+
+  res.json({ success: true, message: 'Invitation dismissed' });
+});
+
 module.exports = {
   getProfile,
   updateProfile,
@@ -1597,4 +1827,7 @@ module.exports = {
   addBookmark,
   removeBookmark,
   getRecommendations,
+  getInvitations,
+  markInvitationViewed,
+  dismissInvitation,
 };

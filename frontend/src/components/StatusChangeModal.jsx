@@ -63,6 +63,8 @@ function humanize(status) {
 export default function StatusChangeModal({ applicant, onClose, onSubmit }) {
   const [selected, setSelected] = useState(null);
   const [note, setNote] = useState('');
+  const [employerMessage, setEmployerMessage] = useState('');
+  const [interviewDate, setInterviewDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
@@ -72,6 +74,8 @@ export default function StatusChangeModal({ applicant, onClose, onSubmit }) {
   useEffect(() => {
     setSelected(null);
     setNote('');
+    setEmployerMessage('');
+    setInterviewDate('');
     setConfirming(false);
     setSubmitting(false);
   }, [applicant?.applicationId]);
@@ -92,13 +96,23 @@ export default function StatusChangeModal({ applicant, onClose, onSubmit }) {
 
   async function handleSubmit() {
     if (!selected) return;
+    if (selected === 'interview_scheduled' && !interviewDate) {
+      return;
+    }
     if (meta?.requiresConfirm && !confirming) {
       setConfirming(true);
       return;
     }
     setSubmitting(true);
     try {
-      await onSubmit({ status: selected, note: note.trim() || null });
+      await onSubmit({
+        status: selected,
+        note: note.trim() || null,
+        employerMessage: employerMessage.trim() || null,
+        interviewDate: selected === 'interview_scheduled' && interviewDate
+          ? new Date(interviewDate).toISOString()
+          : null,
+      });
       onClose();
     } catch {
       // Caller surfaces the toast; just stop the spinner.
@@ -213,7 +227,41 @@ export default function StatusChangeModal({ applicant, onClose, onSubmit }) {
                   })}
                 </div>
 
-                {/* Note */}
+                {/* Interview date — only when scheduling an interview */}
+                {selected === 'interview_scheduled' && (
+                  <div className="mt-5">
+                    <label className="text-xs text-surface-500 dark:text-surface-400 font-bold uppercase tracking-wide mb-2 block">
+                      Interview date & time <span className="text-red-500 normal-case font-medium">(required)</span>
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={interviewDate}
+                      onChange={(e) => setInterviewDate(e.target.value)}
+                      min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
+                      className="w-full rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 text-surface-900 dark:text-white text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-colors duration-150"
+                    />
+                  </div>
+                )}
+
+                {/* Visible message to candidate */}
+                <div className="mt-5">
+                  <label className="text-xs text-surface-500 dark:text-surface-400 font-bold uppercase tracking-wide mb-2 block">
+                    Message to candidate <span className="text-surface-400 normal-case font-medium">(optional, visible to candidate)</span>
+                  </label>
+                  <textarea
+                    value={employerMessage}
+                    onChange={(e) => setEmployerMessage(e.target.value)}
+                    rows={2}
+                    maxLength={2000}
+                    placeholder="e.g. Please confirm your availability for the interview slot."
+                    className="w-full rounded-xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 text-surface-900 dark:text-white text-sm placeholder:text-surface-400 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-colors duration-150 resize-y"
+                  />
+                  <p className="text-[11px] text-surface-400 mt-1 text-right tabular-nums">
+                    {employerMessage.length} / 2000
+                  </p>
+                </div>
+
+                {/* Internal note */}
                 <div className="mt-5">
                   <label className="text-xs text-surface-500 dark:text-surface-400 font-bold uppercase tracking-wide mb-2 block">
                     Internal note <span className="text-surface-400 normal-case font-medium">(optional, not shown to candidate)</span>
@@ -264,7 +312,7 @@ export default function StatusChangeModal({ applicant, onClose, onSubmit }) {
             {!isTerminal && (
               <button
                 onClick={handleSubmit}
-                disabled={!selected || submitting}
+                disabled={!selected || submitting || (selected === 'interview_scheduled' && !interviewDate)}
                 className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                   meta ? TONE_BUTTON[meta.tone] : 'bg-primary-600 text-white'
                 }`}

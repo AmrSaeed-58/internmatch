@@ -4,7 +4,10 @@
 // No test framework required. Uses node:assert/strict and a tiny harness.
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { score, _internal } = require('../src/services/matchingEngine');
+const { FIELDS, MAJOR_FIELD_MAP, resolveMajorFields } = require('../src/config/majorFieldMap');
 const { computeMandatoryCap } = _internal;
 
 let passed = 0;
@@ -42,6 +45,13 @@ function internship({
     internship_id: 1, industry, city, country, work_type, minimum_gpa, deadline,
     mandatorySkills, optionalSkills,
   };
+}
+
+function readFrontendArray(name) {
+  const file = path.join(__dirname, '../../frontend/src/utils/academicData.js');
+  const text = fs.readFileSync(file, 'utf8');
+  const body = text.split(`export const ${name} = [`)[1].split('];')[0];
+  return [...body.matchAll(/'([^']+)'/g)].map((m) => m[1]);
 }
 
 function skill(id, level = 'intermediate', name = `s${id}`) {
@@ -153,6 +163,32 @@ group('Major scoring (10 pts)', () => {
       internship: internship({ mandatorySkills: [skill(1)], industry: 'Technology' }),
     });
     assert.equal(r.breakdown.major.score, 0);
+  });
+});
+
+group('Major field map coverage', () => {
+  test('every selectable frontend major resolves to a primary field', () => {
+    const majors = readFrontendArray('MAJORS');
+    const unmapped = majors.filter((m) => !resolveMajorFields(m).primary);
+    assert.deepEqual(unmapped, []);
+  });
+
+  test('every mapped primary/related field is a selectable employer industry', () => {
+    const industries = new Set(readFrontendArray('INDUSTRIES'));
+    const invalid = [];
+
+    for (const [major, fields] of Object.entries(MAJOR_FIELD_MAP)) {
+      if (!industries.has(fields.primary)) invalid.push(`${major}: primary=${fields.primary}`);
+      for (const related of fields.related) {
+        if (!industries.has(related)) invalid.push(`${major}: related=${related}`);
+      }
+    }
+
+    for (const field of Object.values(FIELDS)) {
+      if (!industries.has(field)) invalid.push(`FIELDS value not selectable: ${field}`);
+    }
+
+    assert.deepEqual(invalid, []);
   });
 });
 

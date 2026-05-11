@@ -124,6 +124,7 @@ export default function StudentApplications() {
         statusUpdatedAt: a.statusUpdatedAt,
         coverLetter: a.coverLetter,
         employerNote: a.employerNote,
+        interviewDate: a.interviewDate,
       }));
       setApplications(mapped);
     } catch {
@@ -349,6 +350,31 @@ export default function StudentApplications() {
                     )}
                   </div>
                 </div>
+
+                {(app.interviewDate || app.employerNote) && (
+                  <div className="mt-3 space-y-2">
+                    {app.interviewDate && (
+                      <div className="rounded-xl border border-primary-200 dark:border-primary-800/40 bg-primary-50 dark:bg-primary-900/20 p-3 text-sm">
+                        <div className="text-[10px] font-bold uppercase tracking-wide text-primary-700 dark:text-primary-300 mb-1">
+                          Interview scheduled
+                        </div>
+                        <div className="text-surface-900 dark:text-white font-bold">
+                          {new Date(app.interviewDate).toLocaleString()}
+                        </div>
+                      </div>
+                    )}
+                    {app.employerNote && (
+                      <div className="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/40 p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-wide text-surface-500 dark:text-surface-400 mb-1">
+                          Message from employer
+                        </div>
+                        <p className="text-sm text-surface-700 dark:text-surface-200 whitespace-pre-wrap leading-relaxed">
+                          {app.employerNote}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </motion.div>
             );
           })}

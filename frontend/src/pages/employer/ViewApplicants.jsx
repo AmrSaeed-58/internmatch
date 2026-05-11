@@ -15,6 +15,8 @@ import {
   Star,
   Loader2,
   RefreshCw,
+  History,
+  FileText,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -22,6 +24,7 @@ import StatusBadge from '../../components/StatusBadge';
 import MatchScoreBadge from '../../components/MatchScoreBadge';
 import EmptyState from '../../components/EmptyState';
 import StatusChangeModal, { STATUS_TRANSITIONS } from '../../components/StatusChangeModal';
+import ApplicationHistoryModal from '../../components/ApplicationHistoryModal';
 import * as employerAPI from '../../api/employer';
 import * as messagesAPI from '../../api/messages';
 import { downloadBlobFromResponse } from '../../utils/downloadFile';
@@ -77,6 +80,8 @@ export default function ViewApplicants() {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
   const [statusTarget, setStatusTarget] = useState(null);
+  const [historyTarget, setHistoryTarget] = useState(null);
+  const [coverLetterOpen, setCoverLetterOpen] = useState({}); // applicationId -> bool
 
   useEffect(() => {
     async function fetchData() {
@@ -98,11 +103,11 @@ export default function ViewApplicants() {
     fetchData();
   }, [id, page, statusFilter, sortBy]);
 
-  async function submitStatusChange({ status, note }) {
+  async function submitStatusChange({ status, note, employerMessage, interviewDate }) {
     if (!statusTarget) return;
     const applicationId = statusTarget.applicationId;
     try {
-      await employerAPI.updateApplicationStatus(applicationId, { status, note });
+      await employerAPI.updateApplicationStatus(applicationId, { status, note, employerMessage, interviewDate });
       setApplicants((prev) =>
         prev.map((a) => (a.applicationId === applicationId ? { ...a, status } : a))
       );
@@ -312,12 +317,39 @@ export default function ViewApplicants() {
                                 >
                                   <MessageSquare size={13} /> {messagingId === applicant.studentUserId ? 'Opening...' : 'Message Student'}
                                 </button>
+                                <button
+                                  onClick={() => { setHistoryTarget(applicant); setOpenDropdown(null); }}
+                                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-700/50 transition-colors duration-100 cursor-pointer text-left"
+                                >
+                                  <History size={13} /> View History
+                                </button>
+                                {applicant.coverLetter && (
+                                  <button
+                                    onClick={() => {
+                                      setCoverLetterOpen((prev) => ({ ...prev, [applicant.applicationId]: !prev[applicant.applicationId] }));
+                                      setOpenDropdown(null);
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-700/50 transition-colors duration-100 cursor-pointer text-left"
+                                  >
+                                    <FileText size={13} /> {coverLetterOpen[applicant.applicationId] ? 'Hide cover letter' : 'View cover letter'}
+                                  </button>
+                                )}
                               </div>
                             </>
                           )}
                         </div>
                       </div>
                     </div>
+                    {applicant.coverLetter && coverLetterOpen[applicant.applicationId] && (
+                      <div className="mt-3 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/40 p-3.5">
+                        <div className="text-[10px] font-bold uppercase tracking-wide text-surface-400 dark:text-surface-500 mb-1.5 flex items-center gap-1.5">
+                          <FileText size={11} /> Cover letter
+                        </div>
+                        <p className="text-sm text-surface-700 dark:text-surface-200 whitespace-pre-wrap leading-relaxed">
+                          {applicant.coverLetter}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               );
@@ -359,6 +391,10 @@ export default function ViewApplicants() {
         applicant={statusTarget}
         onClose={() => setStatusTarget(null)}
         onSubmit={submitStatusChange}
+      />
+      <ApplicationHistoryModal
+        applicant={historyTarget}
+        onClose={() => setHistoryTarget(null)}
       />
     </DashboardLayout>
   );

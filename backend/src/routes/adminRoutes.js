@@ -59,6 +59,12 @@ router.delete('/internships/:id',
   adminController.deleteInternship
 );
 
+router.get('/internships/:id/applicants',
+  param('id').isInt().withMessage('Invalid internship ID'),
+  handleValidationErrors,
+  adminController.getInternshipApplicants
+);
+
 router.get('/logs', adminController.getLogs);
 router.get('/logs/export', adminController.exportLogs);
 

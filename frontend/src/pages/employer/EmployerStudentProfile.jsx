@@ -123,7 +123,7 @@ export default function EmployerStudentProfile() {
             {error || 'Student profile not available'}
           </p>
           <p className="text-sm text-surface-500 dark:text-surface-400 mb-6">
-            You can only view profiles of students who applied to your internships or who you invited.
+            Only active student profiles can be viewed.
           </p>
           <button
             onClick={() => navigate(-1)}

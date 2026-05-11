@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   Eye,
@@ -492,7 +492,9 @@ function EmployerForm({ onSuccess }) {
 export default function RegisterPage() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState('student');
+  const [searchParams] = useSearchParams();
+  const initialRole = searchParams.get('role') === 'employer' ? 'employer' : 'student';
+  const [activeTab, setActiveTab] = useState(initialRole);
 
   function handleSuccess() {
     navigate('/login', {

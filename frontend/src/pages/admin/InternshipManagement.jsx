@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Search,
@@ -509,7 +510,18 @@ export default function InternshipManagement() {
                         <td className="px-5 py-3.5 text-surface-500 dark:text-surface-400 whitespace-nowrap font-medium">{item.companyName}</td>
                         <td className="px-5 py-3.5"><StatusBadge status={item.status} /></td>
                         <td className="px-5 py-3.5 text-surface-400 dark:text-surface-500 whitespace-nowrap">{formatDate(item.createdAt)}</td>
-                        <td className="px-5 py-3.5 text-surface-600 dark:text-surface-300 font-bold">{item.applicantCount ?? '--'}</td>
+                        <td className="px-5 py-3.5 text-surface-600 dark:text-surface-300 font-bold">
+                          {item.applicantCount > 0 ? (
+                            <Link
+                              to={`/admin/internships/${item.internshipId}/applicants`}
+                              className="text-primary-600 dark:text-primary-400 hover:underline cursor-pointer"
+                            >
+                              {item.applicantCount}
+                            </Link>
+                          ) : (
+                            <span>{item.applicantCount ?? '--'}</span>
+                          )}
+                        </td>
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-1">
                             <ActionBtn icon={Eye}         title="View"    onClick={() => setViewItem(item)}   cls="text-surface-500 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20" />

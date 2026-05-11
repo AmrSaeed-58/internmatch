@@ -241,6 +241,7 @@ CREATE TABLE application (
   applied_date              DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   status_updated_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   employer_note             TEXT          DEFAULT NULL,
+  interview_date            DATETIME      DEFAULT NULL,
   updated_at                DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (application_id),
   UNIQUE KEY uq_student_internship_application (student_user_id, internship_id),

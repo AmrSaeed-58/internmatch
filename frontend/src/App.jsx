@@ -32,6 +32,7 @@ import {
   AdminDashboard,
   UserManagement,
   InternshipManagement,
+  InternshipApplicants,
   SystemLogs,
   AdminReports,
   AdminSettings,
@@ -184,6 +185,9 @@ function AppRoutes() {
       } />
       <Route path="/admin/internships" element={
         <ProtectedRoute allowedRoles={['admin']}><InternshipManagement /></ProtectedRoute>
+      } />
+      <Route path="/admin/internships/:id/applicants" element={
+        <ProtectedRoute allowedRoles={['admin']}><InternshipApplicants /></ProtectedRoute>
       } />
       <Route path="/admin/logs" element={
         <ProtectedRoute allowedRoles={['admin']}><SystemLogs /></ProtectedRoute>

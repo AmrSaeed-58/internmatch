@@ -785,7 +785,7 @@ function EmployersSection() {
               ))}
             </div>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Link to="/register" className="group inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-accent-500 to-accent-600 hover:from-accent-600 hover:to-accent-700 text-white font-bold text-lg rounded-xl shadow-glow-accent transition-colors duration-300">
+              <Link to="/register?role=employer" className="group inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-accent-500 to-accent-600 hover:from-accent-600 hover:to-accent-700 text-white font-bold text-lg rounded-xl shadow-glow-accent transition-colors duration-300">
                 Post Your First Internship
                 <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform duration-300" />
               </Link>
@@ -851,10 +851,10 @@ function Footer() {
       { label: 'Track Applications', to: '/register' },
     ],
     'For Employers': [
-      { label: 'Post Internship', to: '/register' },
-      { label: 'Find Candidates', to: '/register' },
-      { label: 'AI Screening', to: '/register' },
-      { label: 'Analytics', to: '/register' },
+      { label: 'Post Internship', to: '/register?role=employer' },
+      { label: 'Find Candidates', to: '/register?role=employer' },
+      { label: 'AI Screening', to: '/register?role=employer' },
+      { label: 'Analytics', to: '/register?role=employer' },
     ],
     'Company': [
       { label: 'About Us', to: '/about' },

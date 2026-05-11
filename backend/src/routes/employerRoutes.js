@@ -233,9 +233,24 @@ router.put(
     body('note')
       .optional({ values: 'null' })
       .isLength({ max: 1000 }),
+    body('employerMessage')
+      .optional({ values: 'null' })
+      .isLength({ max: 2000 })
+      .withMessage('Message to candidate must be at most 2000 characters'),
+    body('interviewDate')
+      .optional({ values: 'null' })
+      .isISO8601()
+      .withMessage('Interview date must be a valid ISO 8601 datetime'),
   ],
   handleValidationErrors,
   employerController.updateApplicationStatus
+);
+
+router.get(
+  '/applications/:id/history',
+  [param('id').isInt().withMessage('Invalid application ID')],
+  handleValidationErrors,
+  employerController.getApplicationHistory
 );
 
 router.get(

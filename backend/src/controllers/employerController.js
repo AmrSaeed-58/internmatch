@@ -13,7 +13,7 @@ const BCRYPT_SALT_ROUNDS = 12;
 const uploadDir = process.env.UPLOAD_DIR || './uploads';
 
 const VALID_INDUSTRIES = [
-  'Technology', 'Finance', 'Healthcare', 'Education', 'Marketing', 'Engineering', 'Other',
+  'Technology', 'Finance', 'Healthcare', 'Education', 'Marketing', 'Engineering', 'Business', 'Design', 'Other',
 ];
 
 const getProfile = catchAsync(async (req, res) => {
@@ -438,8 +438,8 @@ const createInternship = catchAsync(async (req, res) => {
 const getInternships = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { status, page = 1, limit = 20 } = req.query;
-  const pageNum = Math.max(1, parseInt(page));
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
   const offset = (pageNum - 1) * limitNum;
 
   let whereClause = 'WHERE i.employer_user_id = ?';
@@ -459,7 +459,7 @@ const getInternships = catchAsync(async (req, res) => {
     `SELECT i.internship_id, i.title, i.status, i.deadline, i.created_at, i.updated_at,
             i.work_type, i.city, i.country, i.admin_review_note,
             (SELECT COUNT(*) FROM application a WHERE a.internship_id = i.internship_id) AS applicant_count,
-            (SELECT COUNT(*) FROM internship_view iv WHERE iv.internship_id = i.internship_id) AS view_count
+            (SELECT COUNT(DISTINCT iv.viewer_user_id) FROM internship_view iv WHERE iv.internship_id = i.internship_id) AS view_count
      FROM internship i
      ${whereClause}
      ORDER BY i.created_at DESC
@@ -502,7 +502,7 @@ const getInternship = catchAsync(async (req, res) => {
             i.duration_months, i.salary_min, i.salary_max, i.minimum_gpa, i.status, i.admin_review_note,
             i.deadline, i.created_at, i.updated_at,
             (SELECT COUNT(*) FROM application a WHERE a.internship_id = i.internship_id) AS applicant_count,
-            (SELECT COUNT(*) FROM internship_view iv WHERE iv.internship_id = i.internship_id) AS view_count
+            (SELECT COUNT(DISTINCT iv.viewer_user_id) FROM internship_view iv WHERE iv.internship_id = i.internship_id) AS view_count
      FROM internship i
      WHERE i.internship_id = ? AND i.employer_user_id = ?`,
     [id, userId]
@@ -784,8 +784,8 @@ const getApplicants = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { id } = req.params;
   const { status, sort = 'match_score', page = 1, limit = 20 } = req.query;
-  const pageNum = Math.max(1, parseInt(page));
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
   const offset = (pageNum - 1) * limitNum;
 
   // Verify ownership
@@ -882,26 +882,12 @@ const getApplicants = catchAsync(async (req, res) => {
   });
 });
 
-// Returns a student's profile so the employer can review them. Access is
-// granted only if the student has applied to one of this employer's
-// internships, or has been invited by this employer.
+// Returns an active student's profile so employers can review candidates from
+// AI matching/search. Application-specific details below remain scoped to this
+// employer's own internships.
 const getApplicantProfile = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { studentId } = req.params;
-
-  const [access] = await pool.execute(
-    `SELECT 1 FROM application a
-       JOIN internship i ON i.internship_id = a.internship_id
-       WHERE a.student_user_id = ? AND i.employer_user_id = ?
-     UNION
-     SELECT 1 FROM internship_invitation inv
-       WHERE inv.student_user_id = ? AND inv.employer_user_id = ?
-     LIMIT 1`,
-    [studentId, userId, studentId, userId]
-  );
-  if (access.length === 0) {
-    throw new AppError('You do not have access to this student profile', 403);
-  }
 
   const [userRows] = await pool.execute(
     `SELECT user_id, full_name, email, profile_picture, created_at
@@ -988,7 +974,7 @@ const getApplicantProfile = catchAsync(async (req, res) => {
 const updateApplicationStatus = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { id } = req.params;
-  const { status, note } = req.body;
+  const { status, note, employerMessage, interviewDate } = req.body;
 
   // Valid transitions (state machine). Status names MUST match the enum
   // declared on `application.status` in Schema.sql.
@@ -1001,35 +987,92 @@ const updateApplicationStatus = catchAsync(async (req, res) => {
     withdrawn: [],
   };
 
-  const [appRows] = await pool.execute(
-    `SELECT a.application_id, a.status, a.student_user_id, a.internship_id,
-            i.title AS internship_title
-     FROM application a
-     JOIN internship i ON i.internship_id = a.internship_id
-     WHERE a.application_id = ? AND i.employer_user_id = ?`,
-    [id, userId]
-  );
-
-  if (appRows.length === 0) throw new AppError('Application not found', 404);
-
-  const app = appRows[0];
-  const currentStatus = app.status;
-
-  if (!validTransitions[currentStatus] || !validTransitions[currentStatus].includes(status)) {
-    throw new AppError(
-      `Cannot change status from "${currentStatus}" to "${status}". Valid transitions: ${(validTransitions[currentStatus] || []).join(', ') || 'none'}`,
-      400
-    );
+  // Normalize the interview date. Only stored when moving to interview_scheduled,
+  // and required for that transition so the student actually gets the date/time.
+  let normalizedInterviewDate = null;
+  if (status === 'interview_scheduled') {
+    if (!interviewDate) {
+      throw new AppError('Interview date is required when scheduling an interview', 400);
+    }
+    const d = new Date(interviewDate);
+    if (Number.isNaN(d.getTime())) {
+      throw new AppError('Interview date is not valid', 400);
+    }
+    if (d.getTime() < Date.now() - 60 * 1000) {
+      throw new AppError('Interview date must be in the future', 400);
+    }
+    normalizedInterviewDate = d.toISOString().slice(0, 19).replace('T', ' ');
   }
 
+  // employerMessage is the candidate-visible message stored on application.employer_note.
+  // note is the internal note stored on application_status_history.note.
+  const trimmedEmployerMessage = typeof employerMessage === 'string' && employerMessage.trim().length > 0
+    ? employerMessage.trim().slice(0, 2000)
+    : null;
+
   const connection = await pool.getConnection();
+  let studentUserId;
+  let internshipTitle;
+  let currentStatus;
   try {
     await connection.beginTransaction();
 
-    await connection.execute(
-      'UPDATE application SET status = ?, status_updated_at = NOW() WHERE application_id = ?',
-      [status, id]
+    // Read + lock the row inside the transaction so two concurrent tabs can't
+    // both pass validation with the same stale "currentStatus".
+    const [appRows] = await connection.execute(
+      `SELECT a.application_id, a.status, a.student_user_id, a.internship_id,
+              i.title AS internship_title
+         FROM application a
+         JOIN internship i ON i.internship_id = a.internship_id
+        WHERE a.application_id = ? AND i.employer_user_id = ?
+        FOR UPDATE`,
+      [id, userId]
     );
+
+    if (appRows.length === 0) {
+      await connection.rollback();
+      throw new AppError('Application not found', 404);
+    }
+
+    const app = appRows[0];
+    currentStatus = app.status;
+    studentUserId = app.student_user_id;
+    internshipTitle = app.internship_title;
+
+    if (!validTransitions[currentStatus] || !validTransitions[currentStatus].includes(status)) {
+      await connection.rollback();
+      throw new AppError(
+        `Cannot change status from "${currentStatus}" to "${status}". Valid transitions: ${(validTransitions[currentStatus] || []).join(', ') || 'none'}`,
+        400
+      );
+    }
+
+    // Build the UPDATE dynamically so we don't overwrite columns the employer
+    // didn't touch. Guarded by `status = ?` as a second line of defense — if
+    // anything slipped past the FOR UPDATE lock (e.g., the row was changed
+    // between locking and updating in some unusual replication setup),
+    // affectedRows will be 0 and we abort.
+    const setClauses = ['status = ?', 'status_updated_at = NOW()'];
+    const setValues = [status];
+    if (trimmedEmployerMessage !== null) {
+      setClauses.push('employer_note = ?');
+      setValues.push(trimmedEmployerMessage);
+    }
+    if (status === 'interview_scheduled') {
+      setClauses.push('interview_date = ?');
+      setValues.push(normalizedInterviewDate);
+    }
+    setValues.push(id, currentStatus);
+    const [updateResult] = await connection.execute(
+      `UPDATE application SET ${setClauses.join(', ')}
+        WHERE application_id = ? AND status = ?`,
+      setValues
+    );
+
+    if (updateResult.affectedRows === 0) {
+      await connection.rollback();
+      throw new AppError('Application status changed in another tab, please refresh', 409);
+    }
 
     await connection.execute(
       `INSERT INTO application_status_history (application_id, old_status, new_status, changed_by_user_id, note)
@@ -1038,26 +1081,70 @@ const updateApplicationStatus = catchAsync(async (req, res) => {
     );
 
     // Notify student
+    const baseMessage = `Your application for "${internshipTitle}" has been updated to: ${status.replace(/_/g, ' ')}`;
+    const fullMessage = status === 'interview_scheduled' && normalizedInterviewDate
+      ? `${baseMessage}. Interview scheduled for ${normalizedInterviewDate}.`
+      : baseMessage;
     await connection.execute(
       `INSERT INTO notification (user_id, type, title, message, reference_id, reference_type)
        VALUES (?, 'application_status_change', ?, ?, ?, 'application')`,
       [
-        app.student_user_id,
+        studentUserId,
         'Application Status Updated',
-        `Your application for "${app.internship_title}" has been updated to: ${status.replace(/_/g, ' ')}`,
+        fullMessage,
         id,
       ]
     );
 
     await connection.commit();
   } catch (err) {
-    await connection.rollback();
+    try { await connection.rollback(); } catch (e) { /* already rolled back */ }
     throw err;
   } finally {
     connection.release();
   }
 
   res.json({ success: true, message: `Application status updated to ${status}` });
+});
+
+// Employer-side history endpoint: same shape as the student version but
+// includes the internal note column that the modal saves.
+const getApplicationHistory = catchAsync(async (req, res) => {
+  const { userId } = req.user;
+  const { id } = req.params;
+
+  // Verify ownership via the internship's employer_user_id.
+  const [appRows] = await pool.execute(
+    `SELECT a.application_id
+       FROM application a
+       JOIN internship i ON i.internship_id = a.internship_id
+      WHERE a.application_id = ? AND i.employer_user_id = ?`,
+    [String(id), String(userId)]
+  );
+  if (appRows.length === 0) throw new AppError('Application not found', 404);
+
+  const [rows] = await pool.execute(
+    `SELECT
+      h.old_status, h.new_status, h.created_at, h.note,
+      u.full_name AS changed_by_name, u.role AS changed_by_role
+    FROM application_status_history h
+    LEFT JOIN users u ON h.changed_by_user_id = u.user_id
+    WHERE h.application_id = ?
+    ORDER BY h.created_at ASC`,
+    [String(id)]
+  );
+
+  res.json({
+    success: true,
+    data: rows.map((r) => ({
+      oldStatus: r.old_status,
+      newStatus: r.new_status,
+      createdAt: r.created_at,
+      note: r.note,
+      changedBy: r.changed_by_name,
+      changedByRole: r.changed_by_role,
+    })),
+  });
 });
 
 const downloadResume = catchAsync(async (req, res) => {
@@ -1085,8 +1172,8 @@ const getCandidates = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { id } = req.params;
   const { minScore = 0, page = 1, limit = 20 } = req.query;
-  const pageNum = Math.max(1, parseInt(page));
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
   const offset = (pageNum - 1) * limitNum;
 
   // Verify ownership and active status
@@ -1271,7 +1358,7 @@ const getAnalytics = catchAsync(async (req, res) => {
   const [internships] = await pool.execute(
     `SELECT i.internship_id, i.title, i.status, i.created_at,
             (SELECT COUNT(*) FROM application a WHERE a.internship_id = i.internship_id) AS applicant_count,
-            (SELECT COUNT(*) FROM internship_view iv WHERE iv.internship_id = i.internship_id) AS view_count,
+            (SELECT COUNT(DISTINCT iv.viewer_user_id) FROM internship_view iv WHERE iv.internship_id = i.internship_id) AS view_count,
             (SELECT COUNT(*) FROM application a WHERE a.internship_id = i.internship_id AND a.status = 'accepted') AS accepted_count,
             (SELECT AVG(a.match_score) FROM application a WHERE a.internship_id = i.internship_id) AS avg_match_score
      FROM internship i
@@ -1302,12 +1389,13 @@ const getAnalytics = catchAsync(async (req, res) => {
     [userId]
   );
 
-  // Views over time (weekly for last 12 weeks)
+  // Views over time (weekly for last 12 weeks). Counts unique students per
+  // week so a single student refreshing the page doesn't inflate the trend.
   const [viewsTrend] = await pool.execute(
     `SELECT
        DATE_FORMAT(iv.viewed_at, '%Y-%u') AS week,
        MIN(DATE(iv.viewed_at)) AS week_start,
-       COUNT(*) AS views
+       COUNT(DISTINCT iv.viewer_user_id) AS views
      FROM internship_view iv
      JOIN internship i ON i.internship_id = iv.internship_id
      WHERE i.employer_user_id = ? AND iv.viewed_at >= DATE_SUB(NOW(), INTERVAL 12 WEEK)
@@ -1398,8 +1486,8 @@ const getAnalytics = catchAsync(async (req, res) => {
 const getNotifications = catchAsync(async (req, res) => {
   const { userId } = req.user;
   const { page = 1, limit = 20, unread } = req.query;
-  const pageNum = Math.max(1, parseInt(page));
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
   const offset = (pageNum - 1) * limitNum;
 
   let whereClause = 'WHERE user_id = ?';
@@ -1414,12 +1502,20 @@ const getNotifications = catchAsync(async (req, res) => {
     params
   );
 
+  // For application-typed notifications, reference_id is the application_id.
+  // Join in the parent internship_id so the navbar can route to
+  // /employer/internship/<internshipId>/applicants without an extra round-trip.
   const [rows] = await pool.execute(
-    `SELECT notification_id, type, title, message, reference_id, reference_type,
-            is_read, created_at
-     FROM notification
-     ${whereClause}
-     ORDER BY created_at DESC
+    `SELECT n.notification_id, n.type, n.title, n.message,
+            n.reference_id, n.reference_type, n.is_read, n.created_at,
+            CASE WHEN n.reference_type = 'application'
+                 THEN (SELECT a.internship_id FROM application a
+                        WHERE a.application_id = n.reference_id)
+                 ELSE NULL
+            END AS related_internship_id
+     FROM notification n
+     ${whereClause.replace('WHERE user_id', 'WHERE n.user_id')}
+     ORDER BY n.created_at DESC
      LIMIT ? OFFSET ?`,
     [...params, String(limitNum), String(offset)]
   );
@@ -1433,6 +1529,7 @@ const getNotifications = catchAsync(async (req, res) => {
       message: r.message,
       referenceId: r.reference_id,
       referenceType: r.reference_type,
+      relatedInternshipId: r.related_internship_id,
       isRead: !!r.is_read,
       createdAt: r.created_at,
     })),
@@ -1661,6 +1758,7 @@ module.exports = {
   getApplicants,
   getApplicantProfile,
   updateApplicationStatus,
+  getApplicationHistory,
   downloadResume,
   getCandidates,
   inviteStudent,

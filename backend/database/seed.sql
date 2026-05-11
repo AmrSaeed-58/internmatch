@@ -1094,6 +1094,12 @@ JOIN users eu ON eu.email = seed.employer_email
 JOIN internship i ON i.title = seed.internship_title AND i.employer_user_id = eu.user_id
 JOIN resume r ON r.student_user_id = su.user_id;
 
+-- Backfill interview_date for any applications already in interview_scheduled
+-- state so the new column has realistic seed data.
+UPDATE application
+   SET interview_date = DATE_ADD(NOW(), INTERVAL 3 DAY)
+ WHERE status = 'interview_scheduled' AND interview_date IS NULL;
+
 INSERT INTO application_status_history (application_id, old_status, new_status, changed_by_user_id, note, created_at)
 SELECT a.application_id, NULL, 'pending', a.student_user_id, 'Application submitted.',
        DATE_SUB(a.applied_date, INTERVAL 1 MINUTE)

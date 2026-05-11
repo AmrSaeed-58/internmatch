@@ -469,6 +469,78 @@ const deleteInternship = catchAsync(async (req, res) => {
   res.json({ success: true, message: 'Internship deleted' });
 });
 
+const getInternshipApplicants = catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+  const offset = (page - 1) * limit;
+  const { status } = req.query;
+
+  const [[internship]] = await pool.query(
+    `SELECT i.internship_id, i.title, i.status, e.company_name
+       FROM internship i
+       JOIN employer e ON e.user_id = i.employer_user_id
+      WHERE i.internship_id = ?`,
+    [id]
+  );
+  if (!internship) throw new AppError('Internship not found', 404);
+
+  const whereClauses = ['a.internship_id = ?'];
+  const params = [id];
+  if (status && ['pending','under_review','interview_scheduled','accepted','rejected','withdrawn'].includes(status)) {
+    whereClauses.push('a.status = ?');
+    params.push(status);
+  }
+  const whereSQL = whereClauses.join(' AND ');
+
+  const [[countRow]] = await pool.query(
+    `SELECT COUNT(*) AS total FROM application a WHERE ${whereSQL}`,
+    params
+  );
+
+  const [rows] = await pool.query(
+    `SELECT a.application_id, a.status, a.match_score, a.applied_date,
+            a.status_updated_at, a.interview_date,
+            u.user_id AS student_user_id, u.full_name, u.email,
+            s.university, s.major, s.gpa, s.graduation_year
+       FROM application a
+       JOIN student s ON s.user_id = a.student_user_id
+       JOIN users   u ON u.user_id = a.student_user_id
+      WHERE ${whereSQL}
+      ORDER BY a.applied_date DESC
+      LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+
+  res.json({
+    success: true,
+    data: {
+      internship: {
+        internshipId: internship.internship_id,
+        title: internship.title,
+        status: internship.status,
+        companyName: internship.company_name,
+      },
+      applicants: rows.map((r) => ({
+        applicationId: r.application_id,
+        status: r.status,
+        matchScore: r.match_score == null ? null : Number(r.match_score),
+        appliedDate: r.applied_date,
+        statusUpdatedAt: r.status_updated_at,
+        interviewDate: r.interview_date,
+        studentUserId: r.student_user_id,
+        fullName: r.full_name,
+        email: r.email,
+        university: r.university,
+        major: r.major,
+        gpa: r.gpa,
+        graduationYear: r.graduation_year,
+      })),
+    },
+    pagination: { page, limit, total: countRow.total, totalPages: Math.ceil(countRow.total / limit) },
+  });
+});
+
 const getLogs = catchAsync(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
@@ -848,6 +920,7 @@ module.exports = {
   approveInternship,
   rejectInternship,
   deleteInternship,
+  getInternshipApplicants,
   getLogs,
   exportLogs,
   generateReport,

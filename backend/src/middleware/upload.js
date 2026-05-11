@@ -15,7 +15,14 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${uuidv4()}${ext}`);
+    // Resumes are staged before confirmation, so they need to be bound to
+    // the authenticated user; prefixing with userId lets confirmResume
+    // verify ownership without a separate staging table.
+    if (file.fieldname === 'resume' && req.user && req.user.userId) {
+      cb(null, `${req.user.userId}_${uuidv4()}${ext}`);
+    } else {
+      cb(null, `${uuidv4()}${ext}`);
+    }
   },
 });
 

@@ -37,7 +37,7 @@ export default function PrivacyPage() {
 
         <Section title="Who Sees Your Data">
           <ul className="list-disc pl-6 space-y-1.5">
-            <li><strong>Other users:</strong> employers see your profile and resume only when you apply to one of their internships.</li>
+            <li><strong>Other users:</strong> employers can view active student profiles; resumes and application details are shown only when you apply to one of their internships.</li>
             <li><strong>Admins:</strong> our admin team can access account data to operate the platform and resolve disputes.</li>
             <li><strong>Third parties:</strong> we use Google Gemini for skill extraction and embeddings; only resume text and job descriptions are sent, never identifiers like email or name.</li>
           </ul>

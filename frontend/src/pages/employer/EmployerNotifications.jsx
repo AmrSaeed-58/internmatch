@@ -58,10 +58,12 @@ function timeAgo(dateStr) {
 }
 
 function getNotificationLink(notification) {
-  const { referenceType, referenceId } = notification;
+  const { referenceType, referenceId, relatedInternshipId } = notification;
   switch (referenceType) {
     case 'application':
-      return `/employer/internship/${referenceId}/applicants`;
+      return relatedInternshipId
+        ? `/employer/internship/${relatedInternshipId}/applicants`
+        : '/employer/internships';
     case 'internship':
       // Employers manage their own internships — keep them inside the employer
       // dashboard rather than dropping them onto the public student-facing page.

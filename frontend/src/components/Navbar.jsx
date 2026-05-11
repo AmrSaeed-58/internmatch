@@ -142,8 +142,10 @@ export default function Navbar({ onMenuToggle, mobileMenuOpen }) {
     switch (n.referenceType) {
       case 'application':
         if (role === 'employer') {
-          return n.referenceId
-            ? `/employer/internship/${n.referenceId}/applicants`
+          // referenceId now stores application_id; relatedInternshipId is
+          // the parent internship_id (joined server-side).
+          return n.relatedInternshipId
+            ? `/employer/internship/${n.relatedInternshipId}/applicants`
             : '/employer/internships';
         }
         return '/student/applications';
@@ -172,17 +174,33 @@ export default function Navbar({ onMenuToggle, mobileMenuOpen }) {
     if (link) navigate(link);
   }
 
-  // Fetch unread message count
+  // Fetch unread message count.
+  // Also refresh on focus, on an explicit 'internmatch:messages-changed'
+  // event (fired by message pages after markAsRead), and on a periodic
+  // poll so cross-tab updates are picked up.
   useEffect(() => {
-    if (!user || role === 'admin') return;
+    if (!user || role === 'admin') return undefined;
+    let cancelled = false;
     async function fetchUnread() {
       try {
         const res = await messagesAPI.getConversations({ limit: 50 });
+        if (cancelled) return;
         const total = (res.data.data || []).reduce((sum, c) => sum + (c.unreadCount || 0), 0);
         setUnreadMessages(total);
       } catch { /* ignore */ }
     }
     fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    const onFocus = () => fetchUnread();
+    const onCustom = () => fetchUnread();
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('internmatch:messages-changed', onCustom);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('internmatch:messages-changed', onCustom);
+    };
   }, [user, role]);
 
   function handleLogout() {
