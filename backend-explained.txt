@@ -1,0 +1,1084 @@
+==========================================================================
+                INTERNMATCH BACKEND - EXPLAINED IN PLAIN ENGLISH
+==========================================================================
+
+This is the brain of InternMatch. It is a server program (Node.js + Express)
+that does three big jobs:
+
+  1. Stores data in a MySQL database (users, internships, applications,
+     messages, notifications, etc.).
+  2. Answers requests from the website (the React frontend) over HTTP -
+     things like "log me in", "show me recommendations", "apply to this
+     internship".
+  3. Handles real-time stuff (chat, notification bell pings) using a
+     technology called Socket.IO that keeps a live connection open between
+     the browser and the server.
+
+Everything lives inside the folder:  backend/src/
+
+The pieces inside that folder are split by what they do. Below is a tour
+of every single file and what it is for.
+
+
+==========================================================================
+                       1. THE FRONT DOOR: server.js
+==========================================================================
+
+File: backend/src/server.js
+
+This is the file that boots the whole backend. When you run the server,
+this is the first file that executes.
+
+What it does, step by step:
+
+  - Loads secrets from the .env file (database password, JWT secret,
+    Gmail password, etc.).
+  - Creates an Express web server. Express is a library that listens for
+    HTTP requests and routes them to handler functions.
+  - Wraps the server with Socket.IO so it can also handle live
+    "push" messages (chat, notifications).
+  - Sets up CORS - tells the browser "yes, you are allowed to talk to me
+    from localhost:3000".
+  - Makes the /uploads folder publicly readable so the website can show
+    profile pictures, company logos, and downloadable resumes.
+  - Auto-creates upload subfolders on startup so the server does not crash
+    if they are missing: uploads/resumes, uploads/profiles, uploads/logos.
+  - Mounts all the API routes. Think of these as the URL prefixes:
+        /api/auth         -> login, register, password reset
+        /api/student      -> things only students can do
+        /api/employer     -> things only employers can do
+        /api/internships  -> public listing of internships
+        /api/messages     -> chat
+        /api/skills       -> list of skills (e.g. JavaScript, Python)
+        /api/admin        -> things only admins can do
+  - /api/health -> a simple "are you alive?" check used by monitoring.
+  - Catches any unmatched /api/* URL with a 404 message.
+  - Hooks up the central error handler so every error becomes a nice JSON
+    response instead of an ugly crash.
+
+Socket.IO part:
+
+  - Every time a browser opens a socket, the server checks the JWT token
+    the user sent. If the token is bad or the user is deactivated, the
+    socket is rejected.
+  - On success, the user joins a private room called "user:<their id>".
+    That way the server can send a message directly to "user:42" without
+    broadcasting to everyone.
+  - The server listens for four kinds of socket events:
+        message:send   -> a chat message was sent
+        message:read   -> chat was opened, mark unread messages as read
+        typing:start   -> show "user is typing..."
+        typing:stop    -> stop showing it
+  - When a message is sent, the server: saves it to the database, pushes
+    it live to both users so all their open tabs update, creates a bell
+    notification row, and pushes that to the recipient too.
+
+
+==========================================================================
+                        2. CONFIGURATION FILES
+==========================================================================
+
+Folder: backend/src/config/
+
+These are small files that hold settings. They are imported by every other
+part of the app so all the rules live in one place.
+
+--------------------------------------------------------------------------
+File: config/db.js
+--------------------------------------------------------------------------
+
+Creates one shared MySQL connection pool (10 connections, reused for every
+query). All controllers borrow connections from this pool. Timezone is
+forced to UTC so dates don't get weird across servers.
+
+--------------------------------------------------------------------------
+File: config/email.js
+--------------------------------------------------------------------------
+
+A small wrapper around Nodemailer (the email-sending library). One function
+sendEmail(to, subject, html) sends a single email. If the email fails it
+just prints to console - it never crashes the request. Used by the
+notification system to email users when something important happens.
+
+--------------------------------------------------------------------------
+File: config/scoring.js
+--------------------------------------------------------------------------
+
+The matching engine's tuning dials. It says:
+  - Mandatory skills are worth 60 points.
+  - Optional skills are worth 10 points.
+  - Major fit is worth 10 points.
+  - GPA fit is worth 10 points.
+  - Location fit is worth 10 points.
+  - If you are at the required skill level, you get 100% credit.
+  - If you are 1 level below required, you get 50%.
+  - If you are 2 levels below, you get 25%.
+  - More than 2 below = 0.
+  - On ties, the internship with the closer deadline wins.
+
+To re-tune the matching algorithm, you only edit this one file.
+
+--------------------------------------------------------------------------
+File: config/majorFieldMap.js
+--------------------------------------------------------------------------
+
+A giant lookup table that maps a student's major (like "Computer Science"
+or "Mechanical Engineering") to one primary industry + a list of related
+industries. The industry strings here match the employer.industry values.
+
+Why this exists: the matching engine first filters out internships that
+have nothing to do with the student's major. A Computer Science student
+should not see Marketing internships at the top of their list. The map
+says "CS belongs to Technology and also kind of fits Engineering". So
+only internships in those industries are scored for that student.
+
+It also has a smart lookup function: even if the student typed "B.Sc. in
+Computer Science", it still resolves to the "Computer Science" row via
+substring matching.
+
+
+==========================================================================
+                          3. MIDDLEWARE
+==========================================================================
+
+Folder: backend/src/middleware/
+
+Middleware are small functions that run BEFORE the actual controller. They
+inspect or modify the request, then either pass it on or reject it.
+
+--------------------------------------------------------------------------
+File: middleware/auth.js
+--------------------------------------------------------------------------
+
+Three functions:
+
+  authenticate      - Reads the "Authorization: Bearer <token>" header,
+                      verifies the JWT, looks up the user in the database,
+                      checks that the account is still active and that the
+                      token hasn't been invalidated by a password change.
+                      If everything is good, it attaches req.user with
+                      { userId, fullName, email, role }.
+
+  authorize(...roles) - Used right after authenticate. Says "only let
+                        students through" or "only admins through". If the
+                        user's role doesn't match, it returns 403.
+
+  optionalAuth      - Same as authenticate but if there's no token or it's
+                      bad, it just sets req.user = null and continues.
+                      Used for the public internship listing - guests can
+                      browse and signed-in students get their match scores
+                      added to the same response.
+
+--------------------------------------------------------------------------
+File: middleware/errorHandler.js
+--------------------------------------------------------------------------
+
+The single place where every error gets converted into a JSON response.
+If anything throws (a controller, the database, validation), it ends up
+here. It also translates technical MySQL errors like "duplicate entry"
+into friendly 409 messages, and converts express-validator's error list
+into a clean { field, message } array. Never leaks stack traces to the
+browser.
+
+--------------------------------------------------------------------------
+File: middleware/validate.js
+--------------------------------------------------------------------------
+
+A tiny helper called handleValidationErrors. After a route lists its
+validation rules (like "email must be a real email, password must be
+8+ chars"), this function checks if any rule failed and triggers a 400
+error if so.
+
+--------------------------------------------------------------------------
+File: middleware/upload.js
+--------------------------------------------------------------------------
+
+Sets up Multer (the file-upload library). Three configurations:
+
+  uploadResume         - PDF or DOCX only, max 5 MB, saved to
+                         uploads/resumes/<userId>_<random>.pdf
+
+  uploadProfilePicture - JPG/PNG/WebP only, max 2 MB, saved to
+                         uploads/profiles/<random>.jpg
+
+  uploadCompanyLogo    - JPG/PNG/WebP only, max 2 MB, saved to
+                         uploads/logos/<random>.jpg
+
+The clever bit: resumes get the user's id stamped into the filename. That
+way, when the student later confirms "yes that's my resume", the server
+can check ownership just from the filename - no need for a separate
+"pending uploads" table.
+
+
+==========================================================================
+                         4. UTILITY HELPERS
+==========================================================================
+
+Folder: backend/src/utils/
+
+Small reusable pieces that aren't tied to any one feature.
+
+--------------------------------------------------------------------------
+File: utils/AppError.js
+--------------------------------------------------------------------------
+
+A custom Error class. Lets controllers say "throw new AppError('Not found',
+404)" and the error handler will automatically respond with HTTP 404. The
+isOperational flag distinguishes our errors from bugs (so we don't leak
+internal stack traces).
+
+--------------------------------------------------------------------------
+File: utils/catchAsync.js
+--------------------------------------------------------------------------
+
+A one-line wrapper that lets us write controllers as plain async functions
+without having to wrap every one in try/catch. Any error inside the
+controller automatically goes to the error handler.
+
+--------------------------------------------------------------------------
+File: utils/normalizeSkill.js
+--------------------------------------------------------------------------
+
+Turns messy user-typed skill names into a clean canonical form so
+duplicates can be detected. Example: "JavaScript", "java script", "JS"
+all collapse to "javascript". Uses a manually curated alias dictionary
+(skillAliases.json) first, then strips spaces/dots/dashes. Keeps "+" and
+"#" so C++ and C# don't get smushed together.
+
+--------------------------------------------------------------------------
+File: utils/skillResolver.js
+--------------------------------------------------------------------------
+
+The smart "find or create" logic for skills. When a student adds a skill,
+or when the AI extracts skills from a resume, this function decides:
+
+  1. Is there an existing skill with the same normalized name? If yes,
+     return that one. (Free, deterministic.)
+  2. If not, call Google's Gemini AI to make a 768-dimension vector that
+     represents the meaning of the skill name. Compare it against the
+     vectors of all existing skills. If the closest one is >= 0.81
+     similarity, treat it as the same skill. (Catches "ReactJS" vs
+     "React.js" vs "React".)
+  3. Otherwise, save it as a brand new skill in the database with its
+     embedding so future searches can find it.
+
+This is what makes the skill database stay clean instead of having
+50 variations of "JavaScript".
+
+--------------------------------------------------------------------------
+File: utils/embeddingService.js
+--------------------------------------------------------------------------
+
+Tiny wrapper around the Google Gemini API. Two functions:
+
+  generateEmbedding(text)         - sends text to Gemini, gets back the
+                                    vector.
+  cosineSimilarity(vecA, vecB)    - math function that tells you how
+                                    similar two vectors are (-1 to +1).
+
+Only used by skillResolver. (The matching engine itself does NOT use AI
+- it is deterministic math.)
+
+--------------------------------------------------------------------------
+File: utils/notificationService.js
+--------------------------------------------------------------------------
+
+One unified function createNotification(...) that every controller calls
+when something noteworthy happens. It does three things at once:
+
+  1. Inserts a row into the notification table (so the bell badge shows
+     it).
+  2. If the user has Socket.IO connected, pushes the notification live
+     so the bell updates without a refresh.
+  3. Checks the user's email preferences - if they opted in for that
+     type of notification, sends a nicely-styled HTML email.
+
+The notification types are: new_application, application_status_change,
+new_message, internship_approved, internship_rejected, invitation_received.
+
+If anything fails (database, email server down), the function eats the
+error so notifications can never break the parent flow.
+
+
+==========================================================================
+                  5. THE MATCHING ENGINE (THE BRAIN)
+==========================================================================
+
+Folder: backend/src/services/
+
+This is the part that calculates "how good a fit is this internship for
+this student?". It runs whenever a student opens their recommendations
+page, applies to an internship, or an employer views their candidate list.
+
+--------------------------------------------------------------------------
+File: services/matchingEngine.js
+--------------------------------------------------------------------------
+
+The pure scoring math. Doesn't touch the database. Give it a student
+object and an internship object, and it returns:
+   { finalScore: 0-100, breakdown: {...}, alerts: [...] }
+
+How the score is built:
+
+  - Mandatory skills (60 points):
+       60 / number of skills = points per skill.
+       For each required skill, check if the student has it.
+       If yes and at the right level (or higher) -> full points.
+       If 1 level below required -> half points.
+       If 2 levels below -> quarter points.
+       If missing entirely -> 0 points for that skill.
+
+  - Optional skills (10 points):
+       Same math. If the employer didn't define any optional skills,
+       the student gets all 10 (neutral default).
+
+  - Major fit (10 points):
+       Look up the student's major in the field map.
+       If the employer's industry matches the major's primary field -> 10.
+       If it's in the related fields -> 5.
+       Otherwise -> 0 (and the internship probably won't even show up).
+
+  - GPA fit (10 points):
+       If the internship has no GPA requirement -> 10 (free pass).
+       If the student's GPA is >= the requirement -> 10.
+       Below it -> proportional: (gpa / minimum) * 10.
+       So a student with 3.0 GPA applying to a 3.5-required internship
+       gets about 8.57 points - they aren't excluded, just penalized.
+
+  - Location fit (10 points):
+       For remote internships -> always 10 (location doesn't matter).
+       Same city + same country -> 10.
+       Same country, different city -> 5 (with an alert if it's on-site).
+       Different country -> 0 (with an alert, and the whole score gets
+       capped at 50 because that's just not practical).
+
+  Then it applies "caps". A student missing the only mandatory skill of
+  a 1-skill internship gets capped at 50 no matter how good the rest is,
+  because they fundamentally lack the requirement. Similar caps apply
+  when 2+ skills are missing.
+
+  Finally, returns the score plus a detailed breakdown so the UI can
+  explain "you got 80 because: 50/60 mandatory, 10/10 optional, etc."
+
+--------------------------------------------------------------------------
+File: services/matchScoreCache.js
+--------------------------------------------------------------------------
+
+Computing scores for hundreds of internships every time the student opens
+their page would be slow. So results are saved in a table called
+match_score_cache (one row per student-internship pair). This file is the
+read-through cache wrapper:
+
+  getOrCompute(student, internship)
+      - Look in cache. Hit? Return it. Miss? Compute, save, return.
+
+  getOrComputeBulk(student, [internshipIds])
+      - Same but for many internships at once (one big SELECT + compute
+        the misses).
+
+  listInFieldInternshipIds(student, major)
+      - The "Stage 1 hard gate". Returns only internships that:
+          - Are active (not draft, not closed).
+          - Have not expired.
+          - The student has not already applied to.
+          - Belong to an industry inside the student's major's field map.
+      - Out-of-field internships never get scored.
+
+  invalidateForStudent(id)     - delete this student's cached rows.
+  invalidateForInternship(id)  - delete this internship's cached rows.
+  invalidateForEmployer(id)    - delete cached rows for ALL their
+                                 internships (used when they change their
+                                 industry, because that flips every score).
+
+The cache is wiped whenever something the score depends on changes:
+profile update, skill change, internship edit, etc. Next request rebuilds
+only what's needed.
+
+
+==========================================================================
+              6. CONTROLLERS - THE FEATURE LOGIC
+==========================================================================
+
+Folder: backend/src/controllers/
+
+A "controller" is a function that handles a specific feature. The route
+files (next section) say "when this URL is hit, run this controller".
+This is where 90% of the actual business logic lives.
+
+--------------------------------------------------------------------------
+File: controllers/authController.js
+--------------------------------------------------------------------------
+
+Login, signup, password reset. Used by everyone, signed in or not.
+
+  register
+      - Takes name, email, password, role, plus role-specific fields
+        (university/major for students, company/industry for employers).
+      - Hashes the password with bcrypt (12 rounds - very secure).
+      - Opens a database transaction so nothing is half-written: inserts
+        the users row, then the student or employer row, then creates
+        default notification preferences. If anything fails, all of it
+        is rolled back.
+      - Sends a welcome email.
+
+  login
+      - Looks up by email, compares the password hash.
+      - Checks that the account is active.
+      - Issues a JWT token containing { userId, role, tokenVersion }.
+        tokenVersion is the magic that lets us invalidate ALL existing
+        tokens when a user changes their password - we just bump the
+        number.
+      - "Remember me" extends the token from 24 hours to 30 days.
+      - Returns the user object with role-specific extra fields filled in.
+
+  forgotPassword
+      - Always returns the same message ("if an account exists, we sent
+        a link"), so attackers can't enumerate which emails are registered.
+      - If the email exists, generates a random token, stores its SHA-256
+        hash with a 1-hour expiry, and emails the raw token to the user.
+
+  resetPassword
+      - Hashes the submitted token, looks it up in the database.
+      - If valid and not used, hashes the new password, updates it,
+        bumps tokenVersion (kicks out all existing sessions), marks the
+        reset token used.
+
+  getMe
+      - Returns the currently logged-in user's full profile (uses the
+        JWT to know who they are).
+
+  logout
+      - Mostly a log entry. JWT logout is client-side - the browser just
+        forgets its token.
+
+--------------------------------------------------------------------------
+File: controllers/studentController.js
+--------------------------------------------------------------------------
+
+Everything a student can do once logged in. Lots of features here.
+
+PROFILE:
+  - getProfile: returns the student's full profile + resume info + skill
+    count.
+  - updateProfile: validates all the fields, normalizes date inputs (so
+    "2025-13-99" gets rejected), saves changes, invalidates the match
+    score cache.
+  - uploadProfilePicture / deleteProfilePicture: image upload, deletes
+    the old file from disk on replace.
+
+RESUME:
+  - uploadResume: receives the file via Multer (saved as
+    "<studentId>_<uuid>.pdf"). Returns the staging path - the file is on
+    disk but not yet linked to the student's account.
+  - confirmResume: the student reviews the AI-extracted skills, picks
+    which to keep, and submits. Verifies the file path's userId prefix
+    matches the logged-in user (security check). Saves the resume row,
+    inserts/updates skills via skillResolver. Invalidates the cache.
+  - getResume / deleteResume: simple read/delete with disk cleanup.
+
+SKILLS:
+  - getSkills: returns the student's skill list with proficiency levels.
+  - addSkills: bulk add, each skill resolved via skillResolver so
+    duplicates auto-merge.
+  - updateSkill: change proficiency level for one skill.
+  - deleteSkill: remove a skill.
+  All of these invalidate the cache.
+
+APPLICATIONS:
+  - getApplications: paginated list of "internships I applied to" with
+    employer info, status, interview date, employer note.
+  - getApplication: single application detail.
+  - getApplicationHistory: shows the sequence of status changes (pending
+    -> under review -> interview scheduled, etc.). Does NOT show the
+    internal employer note - that's hidden from students.
+  - applyToInternship: validates the internship is still open, inserts
+    the application row, captures the current match score for analytics,
+    fires a new_application notification to the employer.
+  - withdrawApplication: sets status to "withdrawn", writes a history row.
+
+RECOMMENDATIONS:
+  - getRecommendations: the big one. Steps:
+      1. Look up the student's major, find their field list.
+      2. Get the list of in-field, active, not-yet-applied internships.
+      3. Bulk get-or-compute scores for all of them (cache hits are
+         instant, misses run the engine).
+      4. Filter by the min-score slider value from the URL.
+      5. Re-fetch the internship details + skills for the survivors.
+      6. Sort by score desc, then deadline asc (sooner wins ties).
+      7. Paginate and respond with full breakdown + alerts on each row.
+
+INVITATIONS:
+  - getInvitations: employers can invite specific students to apply.
+    This lists incoming invitations.
+  - markInvitationViewed / dismissInvitation: state changes.
+
+BOOKMARKS:
+  - getBookmarks / addBookmark / removeBookmark: save-for-later list.
+
+NOTIFICATIONS:
+  - getNotifications: bell dropdown list, joined with related internship
+    so the frontend can deep-link "Your application was accepted" to the
+    actual application page.
+  - markNotificationRead / markAllNotificationsRead.
+  - getNotificationPreferences / updateNotificationPreferences: toggle
+    which types of events trigger emails.
+
+ACCOUNT:
+  - changePassword: verifies current password, hashes new one, bumps
+    tokenVersion (kicks out all sessions).
+  - deleteAccount: requires password confirmation, cascade deletes the
+    user (the database handles cascading via foreign keys). Cleans up
+    files on disk.
+
+--------------------------------------------------------------------------
+File: controllers/employerController.js
+--------------------------------------------------------------------------
+
+The mirror image of studentController, for employer accounts.
+
+PROFILE:
+  - getProfile / updateProfile: standard. If the industry changes, calls
+    invalidateForEmployer so every score involving this employer is
+    rebuilt (industry flips major-fit for everyone).
+  - uploadProfilePicture / uploadCompanyLogo.
+
+INTERNSHIPS:
+  - createInternship: opens a transaction, inserts the internship,
+    resolves each skill via skillResolver, inserts the requires_skill
+    rows with mandatory/optional flag and required level. Status starts
+    as pending_approval until an admin approves.
+  - getInternships: paginated list of this employer's internships with
+    applicant counts and analytics. Defensive integer parsing on page/
+    limit so weird query strings don't crash with NaN.
+  - getInternship: single internship detail with full skill list.
+  - updateInternship: replaces skills if changed. Invalidates the
+    matching cache for this internship.
+  - resubmitInternship: for rejected internships, sends them back to
+    pending_approval after edits.
+  - closeInternship / reopenInternship: toggle status.
+  - deleteInternship: hard delete (cascades to applications, requires_skill,
+    cache rows).
+  - extractSkillsFromJobDescription: feeds the job text to Gemini, gets
+    back a structured skill list with required levels. Employer reviews
+    before saving.
+
+APPLICANTS & CANDIDATES:
+  - getApplicants: per-internship list of who applied, paginated.
+  - getApplicantProfile: full profile of one applicant. Security guard:
+    only works if the student actually applied to one of THIS employer's
+    internships.
+  - updateApplicationStatus: the trickiest function in the backend.
+    Concurrency-safe: opens a transaction, SELECT ... FOR UPDATE locks
+    the row, validates the transition is legal (you can't skip
+    pending -> accepted without going through under_review), the UPDATE
+    has an extra "AND status = <old status>" guard so two simultaneous
+    requests can't both succeed - the second one sees affectedRows = 0
+    and rolls back with a 409 message asking the user to refresh. Then
+    writes a history row, fires the notification.
+  - getApplicationHistory: full history WITH internal notes (employer
+    view, unlike the student version).
+  - downloadResume: streams the PDF/DOCX with the original filename
+    preserved.
+  - getTopCandidates: across all this employer's open internships, who
+    are the highest-scoring candidates globally.
+  - getCandidates: same idea but for one specific internship - ranked
+    list of all students whose score is computable.
+  - inviteStudent: creates an invitation row, fires the
+    invitation_received notification.
+
+ANALYTICS:
+  - getAnalytics: application counts, unique student views (COUNT
+    DISTINCT viewer_user_id), conversion rates, per-internship trends.
+
+NOTIFICATIONS / ACCOUNT: same shape as the student side.
+
+--------------------------------------------------------------------------
+File: controllers/internshipController.js
+--------------------------------------------------------------------------
+
+The public-facing internship endpoints (anyone can hit them, signed-in or
+not).
+
+  - listInternships: paginated browse with filters (city, country, work
+    type, salary range, skills, sort order). If a signed-in student is
+    calling, their match score is attached to every result.
+  - getInternship: one internship's detail. For students, adds the score,
+    breakdown, and alerts. Also logs the view to the internship_view
+    table for the employer's analytics.
+  - getFeatured: hand-picked or score-boosted internships for the home
+    page hero section.
+  - getStats: public homepage totals like "200+ companies, 1500+ students".
+  - getEmployerProfile: public company page showing the employer's info
+    and active internships.
+  - formatInternshipListItem: shared helper that turns a database row
+    into the standard JSON shape the frontend expects. Truncates long
+    descriptions, joins city + country into a "City, Country" string,
+    nests employer fields under .employer.
+  - attachApplicationState: one bulk query that figures out, for a list
+    of internships, whether the current student has applied to each one
+    (and the status). Avoids the N+1 query problem.
+
+--------------------------------------------------------------------------
+File: controllers/adminController.js
+--------------------------------------------------------------------------
+
+The admin panel's logic. Only users with role = 'admin' can reach these.
+
+DASHBOARD:
+  - getDashboardStats: counts of users by role, internships by status,
+    applications, recent activity for the admin home page.
+
+USERS:
+  - getUsers: paginated user list with role/active filters, joined with
+    role-specific tables.
+  - getUserById / updateUser / toggleUserActive / deleteUser: standard
+    admin operations. Deactivating a user immediately blocks new requests
+    (because authenticate checks is_active on every request).
+
+INTERNSHIPS:
+  - getInternships: all internships across the platform with status
+    filter.
+  - approveInternship: changes status to active, notifies the employer.
+  - rejectInternship: changes status to rejected with an optional note,
+    notifies the employer.
+  - deleteInternship: hard delete.
+  - getInternshipApplicants: admin's view of who applied to a specific
+    internship, with match scores. Backs the
+    /admin/internships/:id/applicants page.
+
+LOGS:
+  - getLogs: browse the system_log table with action/user/date filters.
+  - exportLogs: streams a CSV file with proper Content-Disposition so
+    the browser downloads it.
+
+REPORTS:
+  - generateReport: runs aggregations based on a report type (user
+    growth, application funnel, top employers, etc.) within an optional
+    date range. Validates that you didn't pick a date in the future.
+  - exportReport: CSV export of the last generated report.
+
+NOTIFICATIONS / ACCOUNT: same shape as the others.
+
+--------------------------------------------------------------------------
+File: controllers/messageController.js
+--------------------------------------------------------------------------
+
+Chat between students and employers. (Real-time delivery is handled by
+Socket.IO in server.js; these HTTP endpoints are for fetching history
+and the initial conversation list.)
+
+  - getConversations: paginated list of "people I'm talking to" with the
+    last message, unread count, and the other person's name + company +
+    online status.
+  - createConversation: opens a chat thread between a student and
+    employer. Optionally tied to a specific internship as context. If a
+    conversation already exists with the same parties + context, returns
+    the existing one instead of creating a duplicate.
+  - getMessages: paginated message history for one conversation, oldest
+    first.
+  - sendMessage: inserts the message, pushes to both users via Socket.IO,
+    fires a new_message notification (with email if opted in).
+  - markAsRead: when the user opens the chat, mark all incoming messages
+    as read AND clear the matching bell notifications (so the bell
+    doesn't stay red after you've already seen the messages).
+
+
+==========================================================================
+                       7. ROUTES (URL WIRING)
+==========================================================================
+
+Folder: backend/src/routes/
+
+Each route file is just a "phone book" - it says "when this URL is hit,
+run this validation, then this controller". The controllers do the real
+work; these files are short.
+
+--------------------------------------------------------------------------
+File: routes/authRoutes.js
+--------------------------------------------------------------------------
+
+Auth endpoints (no login required for most):
+  POST /api/auth/register
+  POST /api/auth/login
+  POST /api/auth/forgot-password
+  POST /api/auth/reset-password
+  GET  /api/auth/me        (requires login)
+  POST /api/auth/logout    (requires login)
+
+Rate-limited: max 100 requests per 15 minutes per IP on register/login/
+forgot/reset, to slow down brute-force attacks. Password validation
+enforces 8+ chars, an uppercase letter, and a digit.
+
+--------------------------------------------------------------------------
+File: routes/studentRoutes.js
+--------------------------------------------------------------------------
+
+All endpoints require login + student role. URLs are under /api/student/.
+Covers: profile, profile picture, resume (upload/confirm/get/delete),
+skills (list/add/update/delete), applications (list/get/history/apply/
+withdraw), recommendations, invitations, bookmarks, notifications,
+notification preferences, change password, delete account.
+
+Every endpoint has validation rules. For example, the resume confirm
+endpoint validates that the staged file path matches the strict regex
+^/uploads/resumes/<digit>+_<uuid>.(pdf|docx)$ - so a student can never
+confirm a path they didn't upload themselves.
+
+--------------------------------------------------------------------------
+File: routes/employerRoutes.js
+--------------------------------------------------------------------------
+
+Login + employer role. URLs under /api/employer/. Mirrors student routes
+plus internship management, applicants management, candidate search,
+analytics, invitations.
+
+The application-status-update endpoint also accepts an optional
+employerMessage (visible to the candidate) and interviewDate (ISO 8601
+datetime). Both are validated by express-validator.
+
+--------------------------------------------------------------------------
+File: routes/internshipRoutes.js
+--------------------------------------------------------------------------
+
+Public endpoints with optional login. URLs under /api/internships/.
+Lists, search, featured, stats, single-internship detail, public
+employer profile.
+
+--------------------------------------------------------------------------
+File: routes/messageRoutes.js
+--------------------------------------------------------------------------
+
+Login required. URLs under /api/messages/. Conversations list, create
+conversation, get messages, send message, mark read.
+
+--------------------------------------------------------------------------
+File: routes/skillRoutes.js
+--------------------------------------------------------------------------
+
+Login required. URLs under /api/skills/. Inline handlers (no separate
+controller because it's so simple):
+  GET /api/skills?q=java&category=programming  - search skills
+  GET /api/skills/categories                    - list distinct
+                                                  categories
+
+--------------------------------------------------------------------------
+File: routes/adminRoutes.js
+--------------------------------------------------------------------------
+
+Login + admin role. URLs under /api/admin/. Dashboard, users, internships,
+admin internship-applicants page, logs (browse + CSV export), reports
+(generate + export), notifications, change password.
+
+
+==========================================================================
+                  8. THE DATABASE - WHAT IT LOOKS LIKE
+==========================================================================
+
+The SQL schema lives in backend/database/Schema.sql, and example seed
+data in backend/database/seed.sql.
+
+The main tables and what they store:
+
+  users
+      Every account. Holds the password hash, the role (student /
+      employer / admin), is_active flag, and the token_version counter
+      used to invalidate JWTs after password changes.
+
+  student
+      One row per student account. Major, university, graduation year,
+      GPA, bio, city, country, social links, phone, primary resume id.
+
+  employer
+      One row per employer account. Company name, industry, size,
+      description, logo, social links, city, country.
+
+  admin
+      One row per admin account. Access level field.
+
+  internship
+      Job postings. Title, description, city, country, work type
+      (remote / hybrid / on-site), duration, salary min/max, minimum
+      GPA (optional), deadline, status (pending_approval / active /
+      closed / rejected).
+
+  skill
+      Master list of all skills. Display name, normalized name (for
+      dedup), category, and the Gemini-generated embedding vector
+      (stored as JSON).
+
+  has_skill
+      Many-to-many between students and skills with a proficiency level
+      (beginner / intermediate / advanced).
+
+  requires_skill
+      Many-to-many between internships and skills with required level
+      and the is_mandatory flag.
+
+  application
+      One row per student-applied-to-internship. Holds status, cover
+      letter, employer note, interview date, snapshot of the match
+      score at the time of applying.
+
+  application_status_history
+      Audit log: every status change, with from-status, to-status,
+      internal note, who changed it, and when.
+
+  match_score_cache
+      The performance cache. One row per (student, internship) pair.
+      Holds final_score and the full JSON breakdown. Primary key is
+      (student_user_id, internship_id). Indexed on student+score desc
+      for fast ranking.
+
+  bookmark
+      Student's save-for-later list.
+
+  conversation
+      One row per chat thread. Has student_user_id, employer_user_id,
+      optional internship_id, plus context_type/context_key for
+      deduplication.
+
+  message
+      One row per chat message. Sender, content, is_read flag, timestamp.
+
+  notification
+      Bell notifications. Type, title, body, optional reference to
+      another entity (so clicking the bell can deep-link), is_read
+      flag, email_sent flag.
+
+  notification_preference
+      One row per user. Boolean columns for each event type the user
+      can opt out of via email.
+
+  internship_invitation
+      Employer-initiated invites to specific students.
+
+  internship_view
+      Analytics log of who viewed which internship. Backs the
+      "unique student views" stat for employers.
+
+  system_log
+      Audit log. Every important action (registration, login, password
+      reset, internship approve, etc.) gets a row with action name,
+      details (JSON), user id, IP address, timestamp.
+
+  password_reset_token
+      Tokens for forgot-password flow. Stores SHA-256 hash + expiry +
+      used flag.
+
+All foreign keys are ON DELETE CASCADE, which means deleting a user
+automatically deletes their applications, messages, notifications,
+cache rows, etc. atomically - no orphan data.
+
+
+==========================================================================
+            9. HOW FEATURES FIT TOGETHER (END-TO-END FLOWS)
+==========================================================================
+
+To make this concrete, here are some real flows that touch many files.
+
+--------------------------------------------------------------------------
+Flow: Student opens the Recommendations page
+--------------------------------------------------------------------------
+
+  1. Browser sends GET /api/student/recommendations?page=1&minScore=0
+     with the JWT in the Authorization header.
+  2. authRoutes already passed -> studentRoutes router runs:
+        - authenticate (auth.js) checks the JWT, loads the user.
+        - authorize('student') confirms role.
+  3. studentController.getRecommendations runs:
+        - Looks up the student's major.
+        - Calls majorFieldMap.resolveMajorFields to get the field list.
+        - Calls matchScoreCache.listInFieldInternshipIds to get only
+          relevant active internships the student hasn't applied to.
+        - Calls matchScoreCache.getOrComputeBulk - for each internship,
+          either reads the cache or runs matchingEngine.score and saves
+          the result.
+        - Filters by the min-score query param.
+        - Re-fetches internship details + skills from the database.
+        - Calls formatInternshipListItem (from internshipController) on
+          each row.
+        - Sorts by score desc, deadline asc.
+        - Paginates and responds.
+  4. The frontend's StudentRecommendations.jsx renders the response,
+     showing the top match in a big card and the rest as a list with
+     "Why?" expanders that display the 5-signal breakdown.
+
+--------------------------------------------------------------------------
+Flow: Student applies to an internship
+--------------------------------------------------------------------------
+
+  1. POST /api/student/applications { internshipId, coverLetter }.
+  2. studentController.applyToInternship validates the internship is
+     still active and the student hasn't already applied.
+  3. Inserts into application. Captures the current match score via
+     getOrCompute so analytics later can show "applied at score 82".
+  4. Calls notificationService.createNotification with type
+     new_application, recipient = the employer's user id.
+  5. createNotification inserts the notification row, pushes via
+     Socket.IO (if the employer is online), checks their email
+     preferences, and sends an email if opted in.
+
+--------------------------------------------------------------------------
+Flow: Employer changes an applicant's status (race-safe)
+--------------------------------------------------------------------------
+
+  Imagine the employer opens the applicant in two tabs and clicks
+  "Accept" in both at almost the same instant. We need to make sure only
+  one of them actually changes the state.
+
+  1. Tab A: PUT /api/employer/applications/123/status { status: 'accepted' }
+     Tab B: same request.
+  2. Both arrive at employerController.updateApplicationStatus.
+  3. Both open transactions.
+  4. Both run SELECT ... FOR UPDATE on the application row. MySQL gives
+     the lock to whichever request arrived first - say Tab A.
+  5. Tab A reads status='under_review', runs the UPDATE with the trailing
+     guard "AND status = 'under_review'", succeeds (1 row changed),
+     writes the history row, commits, fires the notification.
+  6. Tab B was blocked all this time. It now gets the lock, reads
+     status='accepted'. Either its transition validation rejects, or
+     its UPDATE with "AND status = 'under_review'" matches 0 rows. Either
+     way, it rolls back and responds 409 "Application status changed in
+     another tab, please refresh".
+
+--------------------------------------------------------------------------
+Flow: Real-time chat
+--------------------------------------------------------------------------
+
+  1. Student types a message and presses Enter. The browser fires a
+     Socket.IO event: socket.emit('message:send', { conversationId, content }).
+  2. server.js's message:send handler verifies the sender is a participant
+     in that conversation and the recipient's account is active.
+  3. Inserts the message row.
+  4. Emits 'message:receive' to BOTH users' rooms - the recipient (so
+     their open chat updates instantly) and the sender (so their other
+     tabs/devices stay in sync).
+  5. Inserts a notification row with type='new_message'.
+  6. Emits 'notification:new' to the recipient so their bell badge
+     increments live.
+  7. When the recipient opens the chat, the frontend calls
+     PUT /api/messages/conversations/:id/read.
+  8. markAsRead runs two UPDATEs - one to mark the messages read, one
+     to clear the matching bell notifications (so the bell doesn't stay
+     red after you've already seen the messages).
+  9. Emits 'message:read' to the original sender so their tick marks
+     turn into double-ticks.
+
+--------------------------------------------------------------------------
+Flow: Cache invalidation
+--------------------------------------------------------------------------
+
+  Whenever something changes that would affect match scores, the cache
+  is wiped so the next read recomputes:
+
+  - Student edits their profile (city, country, GPA, bio, major)
+        -> studentController.updateProfile calls
+           matchScoreCache.invalidateForStudent(userId).
+  - Student adds/updates/deletes a skill or confirms a resume
+        -> same invalidation.
+  - Employer edits an internship (city, country, GPA, skills, etc.)
+        -> employerController.updateInternship calls
+           matchScoreCache.invalidateForInternship(internshipId) -
+           wipes the cache for every student who had it cached.
+  - Employer changes their company's industry
+        -> matchScoreCache.invalidateForEmployer(employerId) - wipes
+           every cache row for every internship they own (because
+           major-fit changes for all of them).
+
+The cache always rebuilds on the next read - users never see a "stale"
+score.
+
+--------------------------------------------------------------------------
+Flow: Admin approves an internship
+--------------------------------------------------------------------------
+
+  1. Admin clicks "Approve" in the admin panel.
+  2. PUT /api/admin/internships/:id/approve.
+  3. adminRoutes -> authenticate + authorize('admin') ->
+     adminController.approveInternship.
+  4. Updates the internship status to 'active'.
+  5. Fires an internship_approved notification to the employer (bell +
+     optional email).
+  6. From the next moment, the internship appears in student searches
+     and is eligible for the recommendations engine.
+
+
+==========================================================================
+                          10. ENVIRONMENT VARS
+==========================================================================
+
+The server reads its secrets from a .env file in the backend folder.
+Important ones:
+
+  DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+      MySQL connection settings.
+
+  JWT_SECRET
+      The signing key for JWT tokens. Anyone who has this can forge
+      tokens, so keep it secret.
+
+  JWT_EXPIRES_IN              (default '24h')
+  JWT_REMEMBER_EXPIRES_IN     (default '30d')
+
+  SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
+      Email sending. Usually a Gmail app password.
+
+  CLIENT_URL                  (e.g. http://localhost:3000)
+      Used in CORS and in email links.
+
+  SOCKET_CORS_ORIGIN          (optional, falls back to CLIENT_URL)
+
+  UPLOAD_DIR                  (default './uploads')
+
+  PORT                        (default 5000)
+
+  GEMINI_API_KEY
+      For skill embeddings + AI resume parsing.
+
+  SKILL_SIMILARITY_THRESHOLD  (default 0.81)
+
+
+==========================================================================
+                       11. TLDR - WHAT GOES WHERE
+==========================================================================
+
+Need to change                                   Go to
+-----------------------------------------------  ----------------------------
+The scoring weights                              config/scoring.js
+What field a major belongs to                    config/majorFieldMap.js
+How a request is authenticated                   middleware/auth.js
+How errors are formatted                         middleware/errorHandler.js
+What file types can be uploaded                  middleware/upload.js
+How a skill name is normalized                   utils/normalizeSkill.js
+How duplicate skills are detected                utils/skillResolver.js
+How notifications + emails are sent              utils/notificationService.js
+The actual matching math                         services/matchingEngine.js
+How match scores are cached                      services/matchScoreCache.js
+Signup / login / password reset                  controllers/authController.js
+Anything a student can do                        controllers/studentController.js
+Anything an employer can do                      controllers/employerController.js
+Public internship browsing                       controllers/internshipController.js
+Chat                                             controllers/messageController.js
+Anything an admin can do                         controllers/adminController.js
+Adding/removing API endpoints                    routes/*.js
+Adding/changing database tables                  backend/database/Schema.sql
+
+
+==========================================================================
+                            THAT'S EVERYTHING
+==========================================================================
+
+The whole backend is just these pieces working together:
+
+  - server.js starts everything and handles real-time stuff.
+  - config/ has the dials and the database connection.
+  - middleware/ has the guards that run before every request.
+  - utils/ has the small helpers.
+  - services/ has the matching brain.
+  - controllers/ has the feature logic.
+  - routes/ wires URLs to controllers.
+  - The MySQL database stores everything.
+
+Every feature on the website maps to one or more controller functions,
+which use the services and utils to do their work, and respond with JSON
+that the React frontend then renders.
