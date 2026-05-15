@@ -1,4 +1,4 @@
--- InternMatch — full database schema (single file, no migrations).
+-- InternMatch — full database schema (single file, no migrations).code
 -- Engine: MySQL 8.0+. Charset: utf8mb4 / utf8mb4_unicode_ci.
 --
 -- Usage (from a fresh MySQL instance):

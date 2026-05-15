@@ -167,7 +167,7 @@ function score({ student, internship }) {
 
   const rawScore = mandatory.score + optional.score + major.score + gpa.score + location.score;
 
-  // Cap collection (count-based mandatory + country-mismatch).
+  // Cap collection (ratio-based mandatory + country-mismatch).
   const caps = [];
   const mandatoryTotal = (internship.mandatorySkills || []).length;
   const missingCount = mandatory.missing.length;
