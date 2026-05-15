@@ -18,6 +18,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import MatchScoreBadge from '../../components/MatchScoreBadge';
 import EmptyState from '../../components/EmptyState';
 import * as employerAPI from '../../api/employer';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 function GraduationBadge({ status }) {
   const isGraduated = status === 'graduated';
@@ -221,7 +222,18 @@ export default function AICandidates() {
                     >
                       <div className="relative p-5 flex flex-col h-full">
                         <div className="flex items-start justify-between mb-4">
-                          <div className="w-12 h-12 rounded-xl bg-primary-600 flex items-center justify-center text-white text-lg font-bold shadow-lg">
+                          {candidate.profilePicture ? (
+                            <img
+                              src={resolveMediaUrl(candidate.profilePicture)}
+                              alt={candidate.fullName || candidate.studentName || ''}
+                              className="w-12 h-12 rounded-xl object-cover shadow-lg ring-2 ring-primary-100 dark:ring-primary-900/40"
+                              onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
+                            />
+                          ) : null}
+                          <div
+                            className="w-12 h-12 rounded-xl bg-primary-600 items-center justify-center text-white text-lg font-bold shadow-lg"
+                            style={{ display: candidate.profilePicture ? 'none' : 'flex' }}
+                          >
                             {(candidate.fullName || candidate.studentName || '?').charAt(0)}
                           </div>
                           <MatchScoreBadge score={Math.round(candidate.matchScore || 0)} variant="compact" />

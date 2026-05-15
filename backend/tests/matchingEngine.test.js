@@ -284,37 +284,75 @@ group('Location scoring (10 pts) — work-mode aware', () => {
   });
 });
 
-group('Count-based mandatory caps', () => {
-  test('N=1, m=0 (level-only gap) -> NO cap', () => {
+group('Ratio-based mandatory caps', () => {
+  test('m=0 (any N) -> NO cap', () => {
     assert.equal(computeMandatoryCap(0, 1), null);
+    assert.equal(computeMandatoryCap(0, 5), null);
+    assert.equal(computeMandatoryCap(0, 36), null);
   });
 
-  test('N=1, m=1 -> cap 50', () => {
-    assert.equal(computeMandatoryCap(1, 1).value, 50);
+  test('N=1, m=1 (100%) -> cap 40, reason most_mandatory_skills_missing', () => {
+    const cap = computeMandatoryCap(1, 1);
+    assert.equal(cap.value, 40);
+    assert.equal(cap.reason, 'most_mandatory_skills_missing');
   });
 
-  test('N=2, m=1 -> cap 60', () => {
-    assert.equal(computeMandatoryCap(1, 2).value, 60);
+  test('N=2, m=1 (50%) -> NO cap (was cap 60 in old rule)', () => {
+    assert.equal(computeMandatoryCap(1, 2), null);
   });
 
-  test('N=2, m=2 -> cap 50 (majority)', () => {
-    assert.equal(computeMandatoryCap(2, 2).value, 50);
+  test('N=2, m=2 (100%) -> cap 40', () => {
+    assert.equal(computeMandatoryCap(2, 2).value, 40);
   });
 
-  test('N=3, m=1 -> NO cap', () => {
+  test('N=3, m=1 (33%) -> NO cap', () => {
     assert.equal(computeMandatoryCap(1, 3), null);
   });
 
-  test('N=3, m=2 -> cap 50 (majority)', () => {
-    assert.equal(computeMandatoryCap(2, 3).value, 50);
+  test('N=3, m=2 (67%) -> cap 50, reason majority_mandatory_skills_missing', () => {
+    const cap = computeMandatoryCap(2, 3);
+    assert.equal(cap.value, 50);
+    assert.equal(cap.reason, 'majority_mandatory_skills_missing');
   });
 
-  test('N=4, m=2 -> cap 60 (exactly half)', () => {
-    assert.equal(computeMandatoryCap(2, 4).value, 60);
+  test('N=3, m=3 (100%) -> cap 40', () => {
+    assert.equal(computeMandatoryCap(3, 3).value, 40);
   });
 
-  test('N=4, m=3 -> cap 50 (majority)', () => {
-    assert.equal(computeMandatoryCap(3, 4).value, 50);
+  test('N=4, m=2 (50%) -> NO cap (was cap 60 in old rule)', () => {
+    assert.equal(computeMandatoryCap(2, 4), null);
+  });
+
+  test('N=4, m=3 (75%) -> cap 40 (was cap 50 in old rule)', () => {
+    assert.equal(computeMandatoryCap(3, 4).value, 40);
+  });
+
+  test('N=10, m=5 (50%) -> NO cap (was cap 50 in old rule)', () => {
+    assert.equal(computeMandatoryCap(5, 10), null);
+  });
+
+  test('N=10, m=6 (60%) -> cap 50', () => {
+    assert.equal(computeMandatoryCap(6, 10).value, 50);
+  });
+
+  test('N=10, m=7 (70%) -> cap 40', () => {
+    assert.equal(computeMandatoryCap(7, 10).value, 40);
+  });
+
+  test('N=36, m=7 (19%) -> NO cap (regression for the reported bug)', () => {
+    assert.equal(computeMandatoryCap(7, 36), null);
+  });
+
+  test('N=36, m=18 (50%) -> NO cap', () => {
+    assert.equal(computeMandatoryCap(18, 36), null);
+  });
+
+  test('N=36, m=19 (~52%) -> cap 50', () => {
+    assert.equal(computeMandatoryCap(19, 36).value, 50);
+  });
+
+  test('N=36, m=26 (~72%) -> cap 40', () => {
+    assert.equal(computeMandatoryCap(26, 36).value, 40);
   });
 
   test('N=1 with skill at 1 level lower -> raw drops to 30/60 mandatory but NO cap fires', () => {
@@ -326,7 +364,7 @@ group('Count-based mandatory caps', () => {
     assert.equal(r.finalScore, 70);
   });
 
-  test('N=2, both at 1 level lower -> NO cap (was capped before refinement)', () => {
+  test('N=2, both at 1 level lower -> NO cap', () => {
     const r = score({
       student: student({
         skills: [studentSkill(1, 'beginner'), studentSkill(2, 'beginner')],
@@ -341,7 +379,7 @@ group('Count-based mandatory caps', () => {
 });
 
 group('Multiple caps interaction', () => {
-  test('mandatory cap + country cap -> take min (50)', () => {
+  test('mandatory all matched + country cap -> binding cap is country (50)', () => {
     const r = score({
       student: student({
         skills: [studentSkill(1), studentSkill(2)],
@@ -354,6 +392,28 @@ group('Multiple caps interaction', () => {
     });
     // mandatory all matched (m=0), so only country cap applies = 50
     assert.equal(r.finalScore, 50);
+    assert.equal(r.breakdown.bindingCap.reason, 'country_mismatch');
+  });
+
+  test('mandatory cap 40 + country cap 50 -> binding cap is mandatory (40)', () => {
+    // 10 mandatory skills, student matches 3 (m=7, N=10 => 70% missing => cap 40).
+    // Student in different country (cap 50). Min wins => 40.
+    // Raw: mandatory 18 (3 * 60/10) + optional 10 + major 10 + gpa 10 + location 0 = 48.
+    // Capped at 40 by the binding mandatory cap.
+    const mandatorySkills = Array.from({ length: 10 }, (_, i) => skill(i + 1));
+    const r = score({
+      student: student({
+        skills: [studentSkill(1), studentSkill(2), studentSkill(3)],
+        city: 'Cairo', country: 'Egypt',
+      }),
+      internship: internship({
+        mandatorySkills,
+        work_type: 'on-site', country: 'Jordan',
+      }),
+    });
+    assert.equal(r.finalScore, 40);
+    assert.equal(r.breakdown.bindingCap.value, 40);
+    assert.equal(r.breakdown.bindingCap.reason, 'most_mandatory_skills_missing');
   });
 });
 

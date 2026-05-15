@@ -7,7 +7,7 @@
 // Algorithm summary (see /plans for full design):
 //   Final = 60% Mandatory Skills + 10% Optional Skills + 10% Major Fit
 //         + 10% GPA Fit + 10% Location Fit
-//   Then: cap by min of count-based mandatory caps and country-mismatch cap.
+//   Then: cap by min of ratio-based mandatory caps and country-mismatch cap.
 //   Then: tiebreak by deadline (handled by caller when sorting).
 
 const { WEIGHTS, LEVEL_VALUE, LEVEL_CREDIT, MAJOR_FIT } = require('../config/scoring');
@@ -128,15 +128,10 @@ function scoreLocation(student, internship) {
 // Stage 3 — caps
 // ---------------------------------------------------------------------------
 function computeMandatoryCap(missingCount, mandatoryTotal) {
-  const m = missingCount;
-  const N = mandatoryTotal;
-  if (m === 0) return null;
-  if (N === 1 && m === 1) return { value: 50, reason: 'sole_mandatory_skill_missing' };
-  if (N === 2 && m === 1) return { value: 60, reason: 'half_mandatory_skills_missing' };
-  if (N >= 3 && m === 1) return null;
-  // Strict majority (more than half) -> 50; exactly half or significant minority -> 60.
-  if (m >= 2 && m * 2 > N) return { value: 50, reason: 'majority_mandatory_skills_missing' };
-  if (m >= 2) return { value: 60, reason: 'multiple_mandatory_skills_missing' };
+  if (mandatoryTotal === 0 || missingCount === 0) return null;
+  const ratio = missingCount / mandatoryTotal;
+  if (ratio >= 0.70) return { value: 40, reason: 'most_mandatory_skills_missing' };
+  if (ratio  > 0.50) return { value: 50, reason: 'majority_mandatory_skills_missing' };
   return null;
 }
 

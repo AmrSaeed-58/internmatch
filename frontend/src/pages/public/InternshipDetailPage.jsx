@@ -881,10 +881,8 @@ export default function InternshipDetailPage() {
                     {bindingCap && (
                       <div className="mt-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200/60 dark:ring-amber-800/40 text-[11px] text-amber-800 dark:text-amber-300">
                         <span className="font-bold">Score capped at {bindingCap.value}.</span>{' '}
-                        {bindingCap.reason === 'sole_mandatory_skill_missing' && 'The only required skill is missing.'}
-                        {bindingCap.reason === 'half_mandatory_skills_missing' && 'Half of the mandatory skills are missing.'}
-                        {bindingCap.reason === 'majority_mandatory_skills_missing' && 'Most of the mandatory skills are missing.'}
-                        {bindingCap.reason === 'multiple_mandatory_skills_missing' && 'Several mandatory skills are missing.'}
+                        {bindingCap.reason === 'most_mandatory_skills_missing' && 'Most of the required skills are missing.'}
+                        {bindingCap.reason === 'majority_mandatory_skills_missing' && 'Over half of the required skills are missing.'}
                         {bindingCap.reason === 'country_mismatch' && 'You are in a different country than this internship.'}
                       </div>
                     )}

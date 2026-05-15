@@ -31,6 +31,12 @@ import { resolveMediaUrl } from '../../utils/mediaUrl';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+const CAP_REASON_TEXT = {
+  most_mandatory_skills_missing:     'Most of the required skills are missing.',
+  majority_mandatory_skills_missing: 'Over half of the required skills are missing.',
+  country_mismatch:                  'You are in a different country than this internship.',
+};
+
 function pct(score, weight) {
   if (score == null || !weight) return 0;
   return Math.max(0, Math.min(100, Math.round((score / weight) * 100)));
@@ -437,7 +443,7 @@ function RankedRow({ rec, rank }) {
                 <div className="mb-3 flex items-start gap-2 p-2.5 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/40">
                   <AlertTriangle size={12} className="text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
                   <p className="text-[11px] text-rose-700 dark:text-rose-300 font-medium">
-                    Score capped at {breakdown.bindingCap.value} (raw: {Math.round(breakdown.rawScore)}) — {breakdown.bindingCap.reason.replace(/_/g, ' ')}
+                    Score capped at {breakdown.bindingCap.value} (raw: {Math.round(breakdown.rawScore)}) — {CAP_REASON_TEXT[breakdown.bindingCap.reason] || ''}
                   </p>
                 </div>
               )}

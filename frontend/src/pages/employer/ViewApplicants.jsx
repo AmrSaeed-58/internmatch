@@ -28,6 +28,7 @@ import ApplicationHistoryModal from '../../components/ApplicationHistoryModal';
 import * as employerAPI from '../../api/employer';
 import * as messagesAPI from '../../api/messages';
 import { downloadBlobFromResponse } from '../../utils/downloadFile';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 const SORT_OPTIONS = [
   { value: 'matchScore', label: 'Match Score' },
@@ -221,7 +222,18 @@ export default function ViewApplicants() {
                   <div className="relative p-4 md:p-5">
                     <div className="flex flex-col sm:flex-row sm:items-start gap-4">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className="w-11 h-11 rounded-xl bg-primary-600 flex items-center justify-center text-white text-base font-extrabold shrink-0 shadow-lg">
+                        {applicant.profilePicture ? (
+                          <img
+                            src={resolveMediaUrl(applicant.profilePicture)}
+                            alt={applicant.fullName || applicant.studentName || ''}
+                            className="w-11 h-11 rounded-xl object-cover shrink-0 shadow-lg ring-2 ring-primary-100 dark:ring-primary-900/40"
+                            onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
+                          />
+                        ) : null}
+                        <div
+                          className="w-11 h-11 rounded-xl bg-primary-600 items-center justify-center text-white text-base font-extrabold shrink-0 shadow-lg"
+                          style={{ display: applicant.profilePicture ? 'none' : 'flex' }}
+                        >
                           {(applicant.fullName || applicant.studentName || '?').charAt(0)}
                         </div>
                         <div className="flex-1 min-w-0">

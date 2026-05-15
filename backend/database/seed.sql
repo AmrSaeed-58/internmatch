@@ -924,9 +924,10 @@ SELECT user_id,
 FROM users WHERE email = 'sami@globaltech.ae'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'Remote Data Engineering Intern (UAE)' AND employer_user_id = users.user_id);
 
--- (d) N=1 mandatory skill -> if the student lacks that skill, the count-based
---     mandatory cap fires at 50 (sole_mandatory_skill_missing). If they have
---     it, the score is capped only by the other components.
+-- (d) N=1 mandatory skill -> if the student lacks that skill, 100% of the
+--     mandatory skills are missing so the ratio-based cap fires at 40
+--     (most_mandatory_skills_missing). If they have it, no mandatory cap
+--     applies.
 INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'React-Only Bootcamp Intern',
@@ -936,8 +937,9 @@ SELECT user_id,
 FROM users WHERE email = 'sarah@techcorp.jo'
   AND NOT EXISTS (SELECT 1 FROM internship WHERE title = 'React-Only Bootcamp Intern' AND employer_user_id = users.user_id);
 
--- (e) N=2 mandatory skills -> when the student is missing 1 of 2, the cap is
---     60 (half_mandatory_skills_missing). When missing both, cap drops to 50.
+-- (e) N=2 mandatory skills -> missing 1 of 2 is exactly 50%, which no longer
+--     triggers a cap under the ratio rule (>50% required). When missing both
+--     (100%), the ratio cap fires at 40 (most_mandatory_skills_missing).
 INSERT INTO internship (employer_user_id, title, description, city, country, work_type, duration_months, salary_min, salary_max, deadline, status)
 SELECT user_id,
        'SQL & MySQL Database Intern',
